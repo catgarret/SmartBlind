@@ -105,6 +105,9 @@ final class WindowStream: NSObject, SCStreamOutput, SCStreamDelegate {
               let buffer = CMSampleBufferGetImageBuffer(sampleBuffer) else { return }
         let size = pointSize
         guard size.width >= 2, size.height >= 2 else { return }
+        // 창 비율과 다른 프레임(크기 변경 직전 설정으로 축소된 프레임)은 버림 → 위치 어긋남 방지
+        let bw = CGFloat(CVPixelBufferGetWidth(buffer)), bh = CGFloat(CVPixelBufferGetHeight(buffer))
+        guard bh > 0, abs(bw / bh - size.width / size.height) <= 0.015 * (size.width / size.height) else { return }
         let pixels = Self.downsample(buffer, to: size)
         let sig = ScrollEstimator.rowSignatures(pixels)
         onFrame?(CapturedFrame(buffer: buffer, pixels: pixels, signature: sig, pointSize: size))

@@ -193,10 +193,19 @@ final class BlindEngine {
                 if existing.info.frame != w.frame {
                     lastMovement = now
                     if existing.info.frame.size != w.frame.size {
+                        // 창 크기 변경: 캡처를 새 크기로 다시 시작 (크기를 바꾸는 동안은 0.25초씩 미룸)
+                        // 기존 캡처 설정만 바꾸면 이전 크기로 축소된 프레임이 섞여 위치가 어긋날 수 있다
                         s.tracker.windowSize = w.frame.size
                         s.dirty = true
-                        s.stream?.update(pointSize: w.frame.size, scale: ScreenGeometry.backingScale(forCG: w.frame),
-                                         fps: settings.recognition.performance.captureFPS)
+                        s.stream?.stop()
+                        s.stream = nil
+                        s.streamStarting = false
+                        s.latest = nil
+                        s.processed = nil
+                        s.processedFrame = nil
+                        s.lastDetectedSignature = nil
+                        s.ocrLines = []
+                        s.streamRetryAt = now + 0.25
                     }
                 }
                 s.info = w
@@ -357,6 +366,8 @@ final class BlindEngine {
 
     private func handleFrame(_ frame: CapturedFrame, windowID: CGWindowID) {
         guard let s = sessions[windowID], s.onScreen else { return }
+        // 크기 변경 전 캡처에서 늦게 도착한 프레임은 버림
+        guard abs(frame.pointSize.width - s.info.frame.width) < 1, abs(frame.pointSize.height - s.info.frame.height) < 1 else { return }
         let prev = s.latest
         s.latest = frame
         if let prev, prev.pointSize == frame.pointSize {
