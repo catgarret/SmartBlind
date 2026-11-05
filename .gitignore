@@ -1,0 +1,14 @@
+.build/
+build/
+.swiftpm/
+*.xcodeproj/xcuserdata/
+.DS_Store
+
+# 사용자 제공 화면 캡처 및 그로부터 만든 파일 — 절대 커밋 금지
+Tests/SmartBlindCoreTests/Fixtures/
+docs/
+*.png
+!Support/AppIcon.png
+*.jpg
+*.jpeg
+*.rgba
