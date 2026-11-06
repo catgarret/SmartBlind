@@ -128,7 +128,11 @@ public struct Detector {
         }
         if let avatar {
             let block = layout.expandBlock(name: nameRect, avatar: avatar)
-            return CoverRegion(personID: pid, rect: block.rect, kind: block.listLike ? .row : .block)
+            var region = CoverRegion(personID: pid, rect: block.rect, kind: block.listLike ? .row : .block)
+            if block.listLike, let badge = layout.findBadge(in: block.rect) {
+                region.holes = [badge.offsetBy(dx: -block.rect.minX, dy: -block.rect.minY)]
+            }
+            return region
         }
         // 구조를 알 수 없으면 보수적으로 이름만
         return nameOnly

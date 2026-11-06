@@ -92,6 +92,13 @@ struct PersonEditor: View {
 
             Section {
                 Toggle("대화 목록에서 (채팅·친구 목록 줄)", isOn: $person.hideInList)
+                if person.hideInList {
+                    Toggle("가린 줄에 대체 글자 표시", isOn: $person.showLabel)
+                    if person.showLabel {
+                        TextField("대체 글자", text: $person.listLabel, prompt: Text("비우면 '가려진 대화'"))
+                    }
+                    Toggle("안 읽은 메시지 수는 보이게", isOn: $person.showUnreadBadge)
+                }
                 Toggle("대화방 안에서 (프로필·이름·말풍선)", isOn: $person.hideInChat)
                 Toggle("알림에서 (macOS 배너·메신저 알림창)", isOn: $person.hideInNotifications)
                 Picker("가림 방식", selection: Binding<CoverMode?>(

@@ -26,10 +26,17 @@ public struct Person: Codable, Identifiable, Hashable, Sendable {
     public var rooms: [String]
     /// 이 사람만 다른 가림 방식 (nil = 전체 설정 따름)
     public var coverMode: CoverMode?
+    /// 목록에서 가린 줄 위에 보여줄 대체 글자 (비우면 "가려진 대화")
+    public var listLabel: String
+    /// 가린 줄 위에 대체 글자 표시
+    public var showLabel: Bool
+    /// 가린 줄의 안 읽은 메시지 수 배지는 보이게
+    public var showUnreadBadge: Bool
 
     public init(id: UUID = UUID(), name: String, aliases: [String] = [], enabled: Bool = true, appBundleIDs: [String] = [],
                 hideInList: Bool = true, hideInChat: Bool = true, hideInNotifications: Bool = true,
-                roomScope: RoomScope = .all, rooms: [String] = [], coverMode: CoverMode? = nil) {
+                roomScope: RoomScope = .all, rooms: [String] = [], coverMode: CoverMode? = nil,
+                listLabel: String = "", showLabel: Bool = true, showUnreadBadge: Bool = true) {
         self.id = id
         self.name = name
         self.aliases = aliases
@@ -41,6 +48,9 @@ public struct Person: Codable, Identifiable, Hashable, Sendable {
         self.roomScope = roomScope
         self.rooms = rooms
         self.coverMode = coverMode
+        self.listLabel = listLabel
+        self.showLabel = showLabel
+        self.showUnreadBadge = showUnreadBadge
     }
 
     /// 매칭에 쓰는 모든 이름 (대표 이름 + 별칭, 공백 제거·중복 제거)
@@ -67,6 +77,7 @@ public struct Person: Codable, Identifiable, Hashable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, aliases, enabled, appBundleIDs, hideInList, hideInChat, hideInNotifications, roomScope, rooms, coverMode
+        case listLabel, showLabel, showUnreadBadge
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -81,6 +92,9 @@ public struct Person: Codable, Identifiable, Hashable, Sendable {
         roomScope = try c.decodeIfPresent(RoomScope.self, forKey: .roomScope) ?? .all
         rooms = try c.decodeIfPresent([String].self, forKey: .rooms) ?? []
         coverMode = try c.decodeIfPresent(CoverMode.self, forKey: .coverMode)
+        listLabel = try c.decodeIfPresent(String.self, forKey: .listLabel) ?? ""
+        showLabel = try c.decodeIfPresent(Bool.self, forKey: .showLabel) ?? true
+        showUnreadBadge = try c.decodeIfPresent(Bool.self, forKey: .showUnreadBadge) ?? true
     }
 }
 
@@ -107,17 +121,30 @@ public struct Room: Codable, Identifiable, Hashable, Sendable {
     public var hideInList: Bool
     /// 이 방을 열면 대화 내용 전체를 가림 (방 제목줄 아래)
     public var hideInside: Bool
+    /// 가린 자리에 보여줄 대체 이름 (비우면 방 이름)
+    public var listLabel: String
+    public var showLabel: Bool
+    /// 가린 줄의 안 읽은 메시지 수 배지는 보이게
+    public var showUnreadBadge: Bool
 
     public init(id: UUID = UUID(), name: String, aliases: [String] = [], enabled: Bool = true,
-                hideInList: Bool = true, hideInside: Bool = true) {
+                hideInList: Bool = true, hideInside: Bool = true,
+                listLabel: String = "", showLabel: Bool = true, showUnreadBadge: Bool = true) {
         self.id = id; self.name = name; self.aliases = aliases; self.enabled = enabled
         self.hideInList = hideInList; self.hideInside = hideInside
+        self.listLabel = listLabel; self.showLabel = showLabel; self.showUnreadBadge = showUnreadBadge
+    }
+
+    /// 가린 자리에 실제로 보여줄 글자
+    public var displayLabel: String {
+        let l = listLabel.trimmingCharacters(in: .whitespaces)
+        return l.isEmpty ? name : l
     }
 
     /// 매칭용 (사람과 같은 매처를 쓰기 위해 Person 모양으로)
     public var asPerson: Person { Person(id: id, name: name, aliases: aliases, enabled: enabled) }
 
-    enum CodingKeys: String, CodingKey { case id, name, aliases, enabled, hideInList, hideInside }
+    enum CodingKeys: String, CodingKey { case id, name, aliases, enabled, hideInList, hideInside, listLabel, showLabel, showUnreadBadge }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -126,6 +153,9 @@ public struct Room: Codable, Identifiable, Hashable, Sendable {
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         hideInList = try c.decodeIfPresent(Bool.self, forKey: .hideInList) ?? true
         hideInside = try c.decodeIfPresent(Bool.self, forKey: .hideInside) ?? true
+        listLabel = try c.decodeIfPresent(String.self, forKey: .listLabel) ?? ""
+        showLabel = try c.decodeIfPresent(Bool.self, forKey: .showLabel) ?? true
+        showUnreadBadge = try c.decodeIfPresent(Bool.self, forKey: .showUnreadBadge) ?? true
     }
 }
 

@@ -195,7 +195,31 @@ final class LayoutTests: XCTestCase {
         XCTAssertLessThan(rect.maxY, 122, "다음 사람 행은 가리지 않음")
         XCTAssertGreaterThan(rect.minY, 46, "윗사람 행은 가리지 않음")
         XCTAssertGreaterThanOrEqual(rect.maxX, 300, "목록은 스크롤 막대 앞까지")
+        XCTAssertTrue(r[0].holes.isEmpty, "배지가 없으면 구멍 없음")
         XCTAssertLessThanOrEqual(rect.maxX, 304, "스크롤 막대(오른쪽 16pt)는 가리지 않음")
+    }
+
+    func testUnreadBadgeStaysVisibleWithLabel() {
+        var img = PixelImage(width: 320, height: 140)
+        func paint(_ x0: Int, _ y0: Int, _ x1: Int, _ y1: Int, _ c: (UInt8, UInt8, UInt8)) {
+            for y in y0..<y1 { for x in x0..<x1 { let i = (y * 320 + x) * 4; img.data[i] = c.0; img.data[i + 1] = c.1; img.data[i + 2] = c.2 } }
+        }
+        let top = 50
+        paint(12, top, 48, top + 36, (120, 60, 90))                 // 방 아이콘
+        paint(58, top + 3, 110, top + 15, (40, 40, 40))             // 방 이름
+        paint(58, top + 21, 180, top + 31, (150, 150, 150))         // 미리보기
+        paint(262, top + 4, 296, top + 13, (150, 150, 150))         // 시간
+        paint(276, top + 18, 296, top + 34, (235, 60, 60))          // 빨간 안 읽은 수 배지
+        let room = Room(name: "디자인 2팀")
+        let lines = [TextLine(text: "디자인 2팀", frame: CGRect(x: 58, y: top + 3, width: 52, height: 12))]
+        let det = Detector(matcher: NameMatcher(people: [room.asPerson], mode: .word))
+        let hits = det.detectHits(DetectionInput(windowSize: CGSize(width: 320, height: 140), kind: .normal, lines: lines, image: img))
+        let r = CoverPolicy(settings: AppSettings(rooms: [room]))
+            .regions(hits: hits, windowKind: .normal, windowSize: CGSize(width: 320, height: 140), titles: [], detector: det)
+        XCTAssertEqual(r.count, 1)
+        XCTAssertEqual(r.first?.label, "디자인 2팀")
+        let hole = try! XCTUnwrap(r.first?.holes.first).offsetBy(dx: r[0].rect.minX, dy: r[0].rect.minY)
+        XCTAssertTrue(hole.contains(CGPoint(x: 286, y: top + 26)), "배지 자리는 뚫어 둠")
     }
 
     func testMentionCoversNameOnly() throws {

@@ -586,6 +586,8 @@ final class BlindEngine {
         let blinds: [OverlayBlind] = s.tracker.blinds.compactMap { b in
             guard let r = displayRect(b, in: s) else { return nil }
             var ob = OverlayBlind(id: b.id, rect: r, revealed: b.isRevealed(at: now), provisional: b.provisional)
+            ob.label = b.label
+            ob.holes = b.holes.map { $0.offsetBy(dx: b.rect.minX - r.minX, dy: b.rect.minY - r.minY) }
             // 배경색 방식의 채움색, 블러/모자이크가 준비되기 전 바탕색 (회색 대신 주변 배경색)
             if style.kind == .background || style.kind == .blur || style.kind == .mosaic {
                 ob.fill = backgroundFill(for: b.id, rect: r, in: s, style: style)

@@ -78,8 +78,17 @@ struct RoomEditor: View {
                 Toggle("이 방을 열면 대화 내용 전체 가리기", isOn: $room.hideInside)
             } header: {
                 Text("가릴 곳")
+            }
+            Section {
+                Toggle("가린 자리에 대체 이름 표시", isOn: $room.showLabel)
+                if room.showLabel {
+                    TextField("대체 이름", text: $room.listLabel, prompt: Text("비우면 방 이름 그대로 (예: 업무방 A)"))
+                }
+                Toggle("안 읽은 메시지 수는 보이게", isOn: $room.showUnreadBadge)
+            } header: {
+                Text("가린 자리에 보일 것")
             } footer: {
-                Text("대화방 창 위쪽 제목에 방 이름이 보이면 그 아래를 모두 가립니다. 가린 곳을 클릭하면 잠깐 볼 수 있고, 창 오른쪽 버튼으로 전체를 끌 수 있습니다.")
+                Text("목록에서는 방 내용(미리보기·사진)은 가리고, 대체 이름과 새 메시지 수만 보여 어떤 방에 새 대화가 왔는지 알 수 있습니다. 대화방 창 위쪽 제목에 방 이름이 보이면 그 아래를 모두 가립니다. 가린 곳을 클릭하면 잠깐 볼 수 있고, 창 오른쪽 버튼으로 전체를 끌 수 있습니다.")
                     .font(.caption).foregroundStyle(.secondary)
             }
         }

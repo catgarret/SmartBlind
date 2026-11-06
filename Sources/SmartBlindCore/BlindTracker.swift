@@ -10,6 +10,9 @@ public struct TrackedBlind: Identifiable, Equatable, Sendable {
     /// 창 기준 좌표
     public var rect: CGRect
     public var kind: RegionKind
+    /// 대체 글자 / 뚫어 둘 곳 (rect 기준 좌표)
+    public var label: String?
+    public var holes: [CGRect]
     /// nil = 가림 상태. 값이 있으면 그 시각까지 공개 (distantFuture = 직접 닫을 때까지)
     public var revealedUntil: Date?
     /// 연속으로 인식에서 빠진 횟수
@@ -71,7 +74,11 @@ public final class BlindTracker {
         var next: [TrackedBlind] = []
         let regions = regions.compactMap { r -> CoverRegion? in
             guard let c = clipToScrollArea(r.rect) else { return nil }
-            var r = r; r.rect = c; return r
+            var r2 = r
+            let dy = c.minY - r.rect.minY
+            r2.rect = c
+            r2.holes = r.holes.map { $0.offsetBy(dx: 0, dy: -dy) }
+            return r2
         }
         for r in regions {
             var bestIndex: Int?
@@ -84,10 +91,13 @@ public final class BlindTracker {
                 var b = old.remove(at: i)
                 b.rect = r.rect
                 b.kind = r.kind
+                b.label = r.label
+                b.holes = r.holes
                 b.misses = 0
                 next.append(b)
             } else {
                 next.append(TrackedBlind(id: UUID(), personID: r.personID, rect: r.rect, kind: r.kind,
+                                         label: r.label, holes: r.holes,
                                          revealedUntil: nil, misses: 0, provisional: false))
             }
         }
@@ -103,7 +113,7 @@ public final class BlindTracker {
     /// 새 팝업 창 전체를 인식 전까지 가림
     public func addProvisional(_ rect: CGRect) {
         guard !blinds.contains(where: { $0.provisional }) else { return }
-        blinds.append(TrackedBlind(id: UUID(), personID: nil, rect: rect, kind: .provisional,
+        blinds.append(TrackedBlind(id: UUID(), personID: nil, rect: rect, kind: .provisional, label: nil, holes: [],
                                    revealedUntil: nil, misses: 0, provisional: true))
     }
 

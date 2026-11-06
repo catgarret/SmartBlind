@@ -67,7 +67,10 @@ public struct CoverPolicy: Sendable {
                 let isTitle = titles.contains { $0.frame.intersects(h.nameRect) }
                 if room.enabled, room.hideInList, !isTitle, windowKind == .normal,
                    region.kind == .row || region.kind == .container {
-                    out.append(region)
+                    var r = region
+                    r.label = room.showLabel ? room.displayLabel : nil
+                    if !room.showUnreadBadge { r.holes = [] }
+                    out.append(r)
                 }
                 continue
             }
@@ -92,7 +95,15 @@ public struct CoverPolicy: Sendable {
                 let rect = h.avatar.map { h.nameRect.union($0) } ?? h.nameRect
                 out.append(CoverRegion(personID: p.id, rect: rect, kind: h.avatar == nil ? .name : .nameAvatar))
             } else {
-                out.append(region)
+                var r = region
+                if context == .list {
+                    let l = p.listLabel.trimmingCharacters(in: .whitespaces)
+                    r.label = p.showLabel ? (l.isEmpty ? "가려진 대화" : l) : nil
+                    if !p.showUnreadBadge { r.holes = [] }
+                } else {
+                    r.holes = []
+                }
+                out.append(r)
             }
         }
 
@@ -103,7 +114,8 @@ public struct CoverPolicy: Sendable {
                 let top = min(windowSize.height - 20, title.frame.maxY + 10)
                 let rect = CGRect(x: 0, y: top, width: max(0, windowSize.width - Detector.scrollBarGutter),
                                   height: max(0, windowSize.height - top))
-                out.append(CoverRegion(personID: room.id, rect: rect, kind: .room))
+                out.append(CoverRegion(personID: room.id, rect: rect, kind: .room,
+                                       label: room.showLabel ? "\(room.displayLabel) · 가린 대화방 (클릭하면 잠깐 보기)" : nil))
             }
         }
         return detector.merge(out, in: windowSize)

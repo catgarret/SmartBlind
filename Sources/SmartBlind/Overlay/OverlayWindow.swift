@@ -12,6 +12,10 @@ struct OverlayBlind {
     let provisional: Bool
     /// 배경색 방식일 때 채울 색 (주변 배경에서 뽑음)
     var fill: CGColor? = nil
+    /// 가림막 위 대체 글자
+    var label: String? = nil
+    /// 뚫어 둘 곳 (rect 왼쪽 위 기준)
+    var holes: [CGRect] = []
 }
 
 /// 감시 중인 창 하나 위에 겹치는 투명 패널. 가림막은 이 패널 안의 레이어로 그린다.
@@ -31,12 +35,21 @@ final class OverlayWindow {
     private final class BlindLayer {
         let container = CALayer()
         let content = CALayer()
+        let label = CATextLayer()
+        let shape = CAShapeLayer()
         var contentKey: String?
         var revealed = false
         init() {
             container.masksToBounds = true
             content.contentsGravity = .resize
             container.addSublayer(content)
+            label.fontSize = 12
+            label.font = NSFont.systemFont(ofSize: 12, weight: .medium)
+            label.alignmentMode = .left
+            label.truncationMode = .end
+            label.isWrapped = false
+            label.contentsScale = NSScreen.main?.backingScaleFactor ?? 2
+            container.addSublayer(label)
         }
     }
     private var blindLayers: [UUID: BlindLayer] = [:]
@@ -177,6 +190,41 @@ final class OverlayWindow {
             CATransaction.begin()
             CATransaction.setDisableActions(true)
             bl.content.frame = CGRect(origin: .zero, size: target.size)
+            // 뚫어 둘 곳(안 읽은 수 배지): 둥근 모양 + 구멍 마스크
+            if b.holes.isEmpty {
+                bl.container.mask = nil
+            } else {
+                let size = target.size
+                let path = CGMutablePath()
+                let radius = min(CGFloat(max(0, style.cornerRadius)), min(size.width, size.height) / 2)
+                path.addRoundedRect(in: CGRect(origin: .zero, size: size), cornerWidth: radius, cornerHeight: radius)
+                for h in b.holes {
+                    // 위 원점 → 레이어(아래 원점)
+                    let hr = CGRect(x: h.minX, y: size.height - h.maxY, width: h.width, height: h.height)
+                        .intersection(CGRect(origin: .zero, size: size))
+                    if !hr.isNull && hr.width > 1 && hr.height > 1 {
+                        path.addRoundedRect(in: hr, cornerWidth: min(hr.height / 2, 9), cornerHeight: min(hr.height / 2, 9))
+                    }
+                }
+                bl.shape.frame = CGRect(origin: .zero, size: size)
+                bl.shape.path = path
+                bl.shape.fillRule = .evenOdd
+                bl.container.mask = bl.shape
+            }
+            // 대체 글자 (방 이름 등): 가운데 높이, 왼쪽 정렬. 배경 밝기에 맞춰 글자색
+            if let text = b.label, !text.isEmpty, target.height >= 18 {
+                let dark = Self.isDark(b.fill)
+                bl.label.string = text
+                bl.label.foregroundColor = (dark ? NSColor(white: 1, alpha: 0.75) : NSColor(white: 0, alpha: 0.55)).cgColor
+                let h: CGFloat = 16
+                let x: CGFloat = min(16, target.width / 4)
+                let holeLeft = b.holes.map { $0.minX }.min() ?? target.width
+                let w = max(0, min(target.width - x - 8, holeLeft - x - 8))
+                bl.label.frame = CGRect(x: x, y: (target.height - h) / 2, width: w, height: h)
+                bl.label.isHidden = b.revealed
+            } else {
+                bl.label.isHidden = true
+            }
             applyContent(bl, blind: b, style: style, processed: processed, scale: scale,
                          customImage: customImage, color: color, fallback: fallback)
             CATransaction.commit()
@@ -291,6 +339,13 @@ final class OverlayWindow {
         host.layer?.sublayers?.forEach { $0.removeFromSuperlayer() }
         blindLayers.removeAll()
         CATransaction.commit()
+    }
+
+    /// 채움색이 어두운지 (글자색 결정)
+    static func isDark(_ c: CGColor?) -> Bool {
+        guard let c, let comps = c.converted(to: CGColorSpace(name: CGColorSpace.sRGB)!, intent: .defaultIntent, options: nil)?.components,
+              comps.count >= 3 else { return false }
+        return 0.299 * comps[0] + 0.587 * comps[1] + 0.114 * comps[2] < 0.5
     }
 
     static func animateOpacity(_ layer: CALayer, from: Float, to: Float, duration: CFTimeInterval) {

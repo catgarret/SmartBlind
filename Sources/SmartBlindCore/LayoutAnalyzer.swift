@@ -22,11 +22,17 @@ public struct CoverRegion: Equatable, Sendable {
     public var personID: UUID?
     public var rect: CGRect
     public var kind: RegionKind
+    /// 가림막 위에 보여줄 대체 글자 (예: 방 이름, "가려진 대화")
+    public var label: String?
+    /// 가리지 않고 뚫어 둘 곳 (안 읽은 메시지 수 배지 등). rect 왼쪽 위 기준 좌표
+    public var holes: [CGRect]
 
-    public init(personID: UUID?, rect: CGRect, kind: RegionKind) {
+    public init(personID: UUID?, rect: CGRect, kind: RegionKind, label: String? = nil, holes: [CGRect] = []) {
         self.personID = personID
         self.rect = rect
         self.kind = kind
+        self.label = label
+        self.holes = holes
     }
 }
 
@@ -241,6 +247,33 @@ public struct LayoutAnalyzer {
         }
         let maxX = CGFloat(min(W, right + 1))
         return (CGRect(x: avatar.minX, y: top, width: maxX - avatar.minX, height: bottomF - top), false)
+    }
+
+    // MARK: 안 읽은 수 배지
+
+    /// 목록 줄 오른쪽의 안 읽은 메시지 수 배지(빨강·파랑 등 채도 높은 작은 동그라미)를 찾는다. 창 기준 좌표.
+    public func findBadge(in row: CGRect) -> CGRect? {
+        guard let img = image else { return nil }
+        let searchW = min(110, row.width * 0.4)
+        let area = CGRect(x: row.maxX - searchW, y: row.minY, width: searchW, height: row.height)
+        let r = img.clampedIntRect(area)
+        guard r.w > 4, r.h > 4 else { return nil }
+        var minX = Int.max, minY = Int.max, maxX = Int.min, maxY = Int.min, n = 0
+        for y in r.y..<(r.y + r.h) {
+            for x in r.x..<(r.x + r.w) {
+                let p = img.pixel(x, y)
+                guard p.a >= 128 else { continue }
+                let hi = max(p.r, max(p.g, p.b)), lo = min(p.r, min(p.g, p.b))
+                if Int(hi) - Int(lo) >= 90 && hi >= 120 {
+                    n += 1
+                    minX = min(minX, x); maxX = max(maxX, x); minY = min(minY, y); maxY = max(maxY, y)
+                }
+            }
+        }
+        guard n >= 30 else { return nil }
+        let w = CGFloat(maxX - minX + 1), h = CGFloat(maxY - minY + 1)
+        guard h >= 10, h <= 32, w >= 10, w <= 70, CGFloat(n) >= 0.35 * w * h else { return nil }
+        return CGRect(x: CGFloat(minX), y: CGFloat(minY), width: w, height: h).insetBy(dx: -2, dy: -2)
     }
 
     // MARK: 알림 카드
