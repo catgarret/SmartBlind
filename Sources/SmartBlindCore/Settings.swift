@@ -115,12 +115,12 @@ public enum NameMask {
         }
     }
 
-    /// 목록에 보일 이름: 별명이 있으면 별명, 없으면 가운데를 가린 이름
-    public static func display(name: String, nickname: String, reveal: Bool) -> String {
+    /// 목록에 보일 이름: 별명이 있으면 별명, 없으면 "대상 3"처럼 번호만 (실제 이름은 한 글자도 안 보임)
+    public static func display(name: String, nickname: String, reveal: Bool, fallback: String) -> String {
         if reveal { return name.isEmpty ? "(이름 없음)" : name }
         let n = nickname.trimmingCharacters(in: .whitespaces)
         if !n.isEmpty { return n }
-        return name.isEmpty ? "(이름 없음)" : mask(name)
+        return fallback
     }
 }
 

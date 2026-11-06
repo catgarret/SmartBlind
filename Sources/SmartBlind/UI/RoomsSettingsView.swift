@@ -10,11 +10,12 @@ struct RoomsSettingsView: View {
         HStack(alignment: .top, spacing: 16) {
             VStack(spacing: 0) {
                 List(selection: $model.selectedRoomID) {
-                    ForEach(model.settings.rooms) { r in
+                    ForEach(Array(model.settings.rooms.enumerated()), id: \.element.id) { index, r in
                         HStack {
                             Image(systemName: r.enabled ? "eye.slash.fill" : "eye")
                                 .foregroundStyle(r.enabled ? Color.accentColor : Color.secondary)
-                            Text(NameMask.display(name: r.name, nickname: r.nickname, reveal: model.revealNamesInSettings))
+                            Text(NameMask.display(name: r.name, nickname: r.nickname, reveal: model.revealNamesInSettings,
+                                                  fallback: "단체방 \(index + 1)"))
                         }
                         .tag(r.id)
                     }
@@ -69,7 +70,7 @@ struct RoomEditor: View {
     var body: some View {
         Form {
             Section {
-                TextField("설정에서 보일 별명", text: $room.nickname, prompt: Text("예: 업무방  (비우면 디*팀처럼 가려 보임)"))
+                TextField("설정에서 보일 별명", text: $room.nickname, prompt: Text("예: 업무방  (비우면 '단체방 1'처럼 번호로 보임)"))
                 if reveal {
                     TextField("방 이름", text: $room.name, prompt: Text("예: 디자인 2팀"))
                     TextField("다른 이름", text: .commaList($room.aliases), prompt: Text("방 이름이 바뀌었거나 줄여 부르는 이름 (쉼표로 구분)"))

@@ -10,12 +10,13 @@ struct PeopleSettingsView: View {
         HStack(alignment: .top, spacing: 16) {
             VStack(spacing: 0) {
                 List(selection: $model.selectedPersonID) {
-                    ForEach(model.settings.people) { p in
+                    ForEach(Array(model.settings.people.enumerated()), id: \.element.id) { index, p in
                         HStack {
                             Image(systemName: p.enabled ? "eye.slash.fill" : "eye")
                                 .foregroundStyle(p.enabled ? Color.accentColor : Color.secondary)
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(NameMask.display(name: p.name, nickname: p.nickname, reveal: model.revealNamesInSettings))
+                                Text(NameMask.display(name: p.name, nickname: p.nickname, reveal: model.revealNamesInSettings,
+                                                      fallback: "대상 \(index + 1)"))
                                 let aliasCount = p.aliases.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
                                 if aliasCount > 0 {
                                     Text(model.revealNamesInSettings ? p.aliases.filter { !$0.isEmpty }.joined(separator: ", ") : "별칭 \(aliasCount)개")
@@ -79,7 +80,7 @@ struct PersonEditor: View {
     var body: some View {
         Form {
             Section {
-                TextField("설정에서 보일 별명", text: $person.nickname, prompt: Text("예: 그분, A  (비우면 홍*동처럼 가려 보임)"))
+                TextField("설정에서 보일 별명", text: $person.nickname, prompt: Text("예: 그분, A  (비우면 '대상 1'처럼 번호로 보임)"))
                 if reveal {
                     TextField("대표 이름", text: $person.name, prompt: Text("예: 홍길동"))
                     TextField("별칭", text: .commaList($person.aliases), prompt: Text("예: hong123, 길동  (쉼표로 구분)"))
@@ -128,7 +129,11 @@ struct PersonEditor: View {
                     ForEach(RoomScope.allCases, id: \.self) { Text($0.title).tag($0) }
                 }
                 if person.roomScope != .all {
-                    TextField("방 이름", text: .commaList($person.rooms), prompt: Text("예: 디자인 2팀, 점심 메이트  (쉼표로 구분)"))
+                    if reveal {
+                        TextField("방 이름", text: .commaList($person.rooms), prompt: Text("예: 디자인 2팀, 점심 메이트  (쉼표로 구분)"))
+                    } else {
+                        SecureField("방 이름", text: .commaList($person.rooms), prompt: Text("쉼표로 구분 (점으로 가려짐)"))
+                    }
                 }
             } header: {
                 Text("특정 방")
