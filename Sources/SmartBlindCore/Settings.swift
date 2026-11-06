@@ -199,13 +199,17 @@ public struct BlindStyle: Codable, Equatable, Sendable {
     public var opacity: Double
     /// 배경색 방식에서 주변보다 얼마나 진하게(어두운 배경이면 밝게) 할지 (0 ~ 0.2). 0이면 배경과 완전히 같은 색
     public var backgroundTint: Double
+    /// 마우스를 올리면 반투명해져 살짝 보이게
+    public var hoverPeek: Bool
+    /// 마우스를 올렸을 때 불투명도 (0.1 ~ 0.9)
+    public var hoverPeekOpacity: Double
     /// 블러 위 반투명 막 색을 창 배경색에 맞춤 (끄면 colorHex 사용)
     public var veilMatchesBackground: Bool
 
     public init(kind: BlindStyleKind = .blur, intensity: Double = 0.9, cornerRadius: Double = 6, padding: Double = 3,
                 colorHex: String = "#D9D9DE", imagePath: String? = nil, imageMode: ImageFillMode = .fill,
                 showRevealOutline: Bool = true, veilMatchesBackground: Bool = true, opacity: Double = 1.0,
-                backgroundTint: Double = 0.04) {
+                backgroundTint: Double = 0.04, hoverPeek: Bool = false, hoverPeekOpacity: Double = 0.45) {
         self.kind = kind
         self.intensity = intensity
         self.cornerRadius = cornerRadius
@@ -217,6 +221,8 @@ public struct BlindStyle: Codable, Equatable, Sendable {
         self.veilMatchesBackground = veilMatchesBackground
         self.opacity = opacity
         self.backgroundTint = backgroundTint
+        self.hoverPeek = hoverPeek
+        self.hoverPeekOpacity = hoverPeekOpacity
     }
 
     /// 모자이크 한 칸 크기 (pt). 강도 0 → 8pt, 1 → 32pt. 이름을 읽을 수 없도록 최소 8pt.
@@ -226,7 +232,7 @@ public struct BlindStyle: Codable, Equatable, Sendable {
     /// 블러 위에 덮는 반투명 막의 불투명도. 강도 0 → 0.2, 1 → 0.75 (사진 윤곽까지 거의 안 보이게)
     public var blurVeilOpacity: Double { 0.2 + 0.55 * max(0, min(1, intensity)) }
 
-    enum CodingKeys: String, CodingKey { case kind, intensity, cornerRadius, padding, colorHex, imagePath, imageMode, showRevealOutline, veilMatchesBackground, opacity, backgroundTint }
+    enum CodingKeys: String, CodingKey { case kind, intensity, cornerRadius, padding, colorHex, imagePath, imageMode, showRevealOutline, veilMatchesBackground, opacity, backgroundTint, hoverPeek, hoverPeekOpacity }
     public init(from decoder: Decoder) throws {
         let d = BlindStyle()
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -241,6 +247,8 @@ public struct BlindStyle: Codable, Equatable, Sendable {
         veilMatchesBackground = try c.decodeIfPresent(Bool.self, forKey: .veilMatchesBackground) ?? d.veilMatchesBackground
         opacity = try c.decodeIfPresent(Double.self, forKey: .opacity) ?? d.opacity
         backgroundTint = try c.decodeIfPresent(Double.self, forKey: .backgroundTint) ?? d.backgroundTint
+        hoverPeek = try c.decodeIfPresent(Bool.self, forKey: .hoverPeek) ?? d.hoverPeek
+        hoverPeekOpacity = try c.decodeIfPresent(Double.self, forKey: .hoverPeekOpacity) ?? d.hoverPeekOpacity
     }
 }
 

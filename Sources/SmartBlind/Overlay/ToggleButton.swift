@@ -46,9 +46,9 @@ final class ToggleButtonPanel {
     /// - windowFrameCG: 메신저 창 (CG 전역)
     /// - fraction: 세로 위치 비율
     /// - blocked: 다른 창에 가려졌으면 숨김
-    func update(windowFrameCG: CGRect, fraction: CGFloat, level: Int, on: Bool, blocked: Bool) {
+    func update(windowFrameCG: CGRect, fraction: CGFloat, sidebarWidth: CGFloat?, level: Int, on: Bool, blocked: Bool) {
         guard !blocked, windowFrameCG.width > 120, windowFrameCG.height > 160 else { hide(); return }
-        let rect = Self.buttonRect(windowFrameCG: windowFrameCG, fraction: fraction)
+        let rect = Self.buttonRect(windowFrameCG: windowFrameCG, fraction: fraction, sidebarWidth: sidebarWidth)
         view.windowFrameCG = windowFrameCG
         let cocoa = ScreenGeometry.cocoaRect(fromCG: rect)
         if panel.frame != cocoa { panel.setFrame(cocoa, display: false) }
@@ -77,11 +77,14 @@ final class ToggleButtonPanel {
         panel.close()
     }
 
-    /// 버튼 위치 (CG 전역)
-    static func buttonRect(windowFrameCG f: CGRect, fraction: CGFloat) -> CGRect {
+    /// 버튼 위치 (CG 전역). 왼쪽 세로 메뉴가 있으면 그 가운데, 없으면 오른쪽 스크롤 막대 옆
+    static func buttonRect(windowFrameCG f: CGRect, fraction: CGFloat, sidebarWidth: CGFloat? = nil) -> CGRect {
         let s = size
-        let minY = f.minY + 60, maxY = f.maxY - 60 - s
+        let minY = f.minY + 60, maxY = f.maxY - 20 - s
         let y = min(max(minY, f.minY + f.height * fraction - s / 2), max(minY, maxY))
+        if let sw = sidebarWidth {
+            return CGRect(x: f.minX + sw / 2 - s / 2, y: y, width: s, height: s)
+        }
         return CGRect(x: f.maxX - rightInset - s, y: y, width: s, height: s)
     }
 }

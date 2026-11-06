@@ -22,6 +22,10 @@ final class BlindEngine {
     /// 창 위 켜기/끄기 버튼을 눌렀을 때
     var onTogglePaused: (() -> Void)?
     private var buttons: [CGWindowID: ToggleButtonPanel] = [:]
+    /// 마우스가 올라가 있는 가림막 (살짝 보기)
+    private var hoveredBlind: UUID?
+    /// 창 왼쪽 세로 메뉴(사이드바) 폭. nil = 사이드바 없음(대화방 창 등)
+    private var sidebarWidths: [CGWindowID: (size: CGSize, width: CGFloat?)] = [:]
 
     private let catalog = WindowCatalog()
     private let ocr = OCRService()
@@ -259,6 +263,7 @@ final class BlindEngine {
 
         ensureStreams(now: now)
 
+        updateHover()
         let date = Date()
         for s in sessions.values where s.onScreen {
             _ = s.tracker.expireReveals(now: date)
@@ -291,20 +296,55 @@ final class BlindEngine {
                 btn.onMoved = { f in UserDefaults.standard.set(Double(f), forKey: "SmartBlind.buttonY.\(bid)") }
                 buttons[w.id] = btn
             }
-            let stored = UserDefaults.standard.object(forKey: "SmartBlind.buttonY.\(bid)") as? Double
-            let fraction = CGFloat(stored ?? 0.78)
-            let rect = ToggleButtonPanel.buttonRect(windowFrameCG: w.frame, fraction: fraction)
+            // 목록 창(왼쪽 세로 메뉴가 있는 창)은 그 메뉴 아래쪽(홈 버튼 위)에, 대화방 창은 오른쪽에
+            let sidebar = sidebarWidth(for: w)
+            let key = "SmartBlind.buttonY.\(bid).\(sidebar == nil ? "right" : "sidebar")"
+            btn.onMoved = { f in UserDefaults.standard.set(Double(f), forKey: key) }
+            let stored = UserDefaults.standard.object(forKey: key) as? Double
+            let fraction = CGFloat(stored ?? (sidebar == nil ? 0.78 : Double(max(0.5, (w.frame.height - 190) / w.frame.height))))
+            let rect = ToggleButtonPanel.buttonRect(windowFrameCG: w.frame, fraction: fraction, sidebarWidth: sidebar)
             // 버튼 자리를 다른 창이 덮고 있으면 숨김
             let blocked = windows[..<index].contains { o in
                 !buttonNumbers.contains(o.id) && o.alpha > 0.01 && o.layer <= NSWindow.Level.floating.rawValue
                     && o.frame.intersects(rect)
             }
-            btn.update(windowFrameCG: w.frame, fraction: fraction, level: 0, on: !settings.paused, blocked: blocked)
+            btn.update(windowFrameCG: w.frame, fraction: fraction, sidebarWidth: sidebar, level: 0,
+                       on: !settings.paused, blocked: blocked)
         }
         for (id, b) in buttons where !seen.contains(id) {
             b.close()
             buttons[id] = nil
+            sidebarWidths[id] = nil
         }
+    }
+
+    /// 창 왼쪽 끝에 진한 단색 세로 메뉴가 있으면 그 폭 (NAVER WORKS 목록 창의 갈색 메뉴 등)
+    private func sidebarWidth(for w: WindowInfo) -> CGFloat? {
+        if let c = sidebarWidths[w.id], c.size == w.frame.size { return c.width }
+        guard let px = sessions[w.id]?.latest?.pixels, px.width >= 120, px.height >= 200 else {
+            return sidebarWidths[w.id]?.width
+        }
+        let y0 = px.height * 3 / 10, y1 = px.height * 7 / 10
+        let probe = CGRect(x: 6, y: y0, width: 30, height: y1 - y0)
+        let base = px.dominantColor(in: probe, step: 3)
+        let lum = (Int(base.r) * 299 + Int(base.g) * 587 + Int(base.b) * 114) / 1000
+        var same = 0, total = 0
+        var y = y0
+        while y < y1 {
+            var x = 6
+            while x < 36 { if px.pixel(x, y).distance(base) <= 18 { same += 1 }; total += 1; x += 3 }
+            y += 3
+        }
+        var result: CGFloat?
+        if lum < 140, total > 0, same * 100 / total >= 80 {
+            // 오른쪽으로 같은 색이 이어지는 폭
+            var x = 36
+            let mid = (y0 + y1) / 2
+            while x < min(px.width / 3, 160), px.pixel(x, mid).distance(base) <= 18 { x += 1 }
+            if x >= 40 { result = CGFloat(x) }
+        }
+        sidebarWidths[w.id] = (w.frame.size, result)
+        return result
     }
 
     private func hideAllOverlays() {
@@ -587,6 +627,7 @@ final class BlindEngine {
             guard let r = displayRect(b, in: s) else { return nil }
             var ob = OverlayBlind(id: b.id, rect: r, revealed: b.isRevealed(at: now), provisional: b.provisional)
             ob.label = b.label
+            ob.hovered = style.hoverPeek && b.id == hoveredBlind
             ob.holes = b.holes.map { $0.offsetBy(dx: b.rect.minX - r.minX, dy: b.rect.minY - r.minY) }
             // 배경색 방식의 채움색, 블러/모자이크가 준비되기 전 바탕색 (회색 대신 주변 배경색)
             if style.kind == .background || style.kind == .blur || style.kind == .mosaic {
@@ -621,6 +662,22 @@ final class BlindEngine {
         }
         s.fillCache[id] = (key, s.latest, color)
         return color
+    }
+
+    /// 마우스 아래 가림막 찾기 (다른 창에 가려진 부분은 제외)
+    private func updateHover() {
+        guard settings.style.hoverPeek else { hoveredBlind = nil; return }
+        let p = ScreenGeometry.cgPoint(fromCocoa: NSEvent.mouseLocation)
+        var found: UUID?
+        for s in sessions.values where s.onScreen && s.info.frame.contains(p) {
+            if s.occludersGlobal.contains(where: { $0.contains(p) }) { continue }
+            let local = CGPoint(x: p.x - s.info.frame.minX, y: p.y - s.info.frame.minY)
+            for b in s.tracker.blinds.reversed() {
+                if let r = displayRect(b, in: s), r.contains(local) { found = b.id; break }
+            }
+            if found != nil { break }
+        }
+        hoveredBlind = found
     }
 
     // MARK: 클릭 공개

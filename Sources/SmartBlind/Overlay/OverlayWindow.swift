@@ -16,6 +16,8 @@ struct OverlayBlind {
     var label: String? = nil
     /// 뚫어 둘 곳 (rect 왼쪽 위 기준)
     var holes: [CGRect] = []
+    /// 마우스가 올라가 있음 (살짝 보기)
+    var hovered = false
 }
 
 /// 감시 중인 창 하나 위에 겹치는 투명 패널. 가림막은 이 패널 안의 레이어로 그린다.
@@ -230,7 +232,8 @@ final class OverlayWindow {
             CATransaction.commit()
 
             // 3) 나타남: 투명 → 설정한 불투명도
-            let alpha = Float(min(1, max(0.3, style.opacity)))
+            let alpha = b.hovered ? Float(min(0.9, max(0.1, style.hoverPeekOpacity)))
+                                  : Float(min(1, max(0.3, style.opacity)))
             if isNew {
                 bl.revealed = b.revealed
                 bl.content.opacity = b.revealed ? 0 : 1

@@ -98,6 +98,15 @@ struct StyleSettingsView: View {
                         ForEach(RevealDuration.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
                     Toggle("공개 중 얇은 테두리 표시", isOn: style.showRevealOutline)
+                    Toggle("마우스를 올리면 반투명하게 살짝 보기", isOn: style.hoverPeek)
+                    if model.settings.style.hoverPeek {
+                        LabeledContent("올렸을 때 불투명도") {
+                            HStack {
+                                Slider(value: style.hoverPeekOpacity, in: 0.1...0.9, step: 0.05)
+                                Text("\(Int((model.settings.style.hoverPeekOpacity * 100).rounded()))%").monospacedDigit().frame(width: 44)
+                            }
+                        }
+                    }
                     Toggle("메신저 창에 켜기/끄기 버튼 표시", isOn: $model.settings.showToggleButton)
                 } header: {
                     Text("클릭해서 보기")
