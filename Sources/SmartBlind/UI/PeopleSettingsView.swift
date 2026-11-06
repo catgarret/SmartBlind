@@ -90,6 +90,35 @@ struct PersonEditor: View {
                     .font(.caption).foregroundStyle(.secondary)
             }
 
+            Section {
+                Toggle("대화 목록에서 (채팅·친구 목록 줄)", isOn: $person.hideInList)
+                Toggle("대화방 안에서 (프로필·이름·말풍선)", isOn: $person.hideInChat)
+                Toggle("알림에서 (macOS 배너·메신저 알림창)", isOn: $person.hideInNotifications)
+                Picker("가림 방식", selection: Binding<CoverMode?>(
+                    get: { person.coverMode },
+                    set: { person.coverMode = $0 }
+                )) {
+                    Text("전체 설정 따름").tag(CoverMode?.none)
+                    ForEach(CoverMode.allCases, id: \.self) { Text($0.title).tag(CoverMode?.some($0)) }
+                }
+            } header: {
+                Text("어디에서 가릴까요")
+            }
+
+            Section {
+                Picker("대화방 범위", selection: $person.roomScope) {
+                    ForEach(RoomScope.allCases, id: \.self) { Text($0.title).tag($0) }
+                }
+                if person.roomScope != .all {
+                    TextField("방 이름", text: .commaList($person.rooms), prompt: Text("예: 디자인 2팀, 점심 메이트  (쉼표로 구분)"))
+                }
+            } header: {
+                Text("특정 방")
+            } footer: {
+                Text("대화방 창 위쪽 제목에 보이는 방 이름으로 구분합니다. 대화 목록과 알림에는 이 설정이 적용되지 않습니다.")
+                    .font(.caption).foregroundStyle(.secondary)
+            }
+
             Section("적용할 앱") {
                 Toggle("감시 중인 모든 앱", isOn: Binding(
                     get: { person.appBundleIDs.isEmpty },

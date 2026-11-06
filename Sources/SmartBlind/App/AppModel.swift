@@ -20,6 +20,7 @@ final class AppModel: ObservableObject {
     // 설정 화면 상태 (Command Line Tools 일부 버전에서 SwiftUI @State 매크로를 쓸 수 없어 여기에 둠)
     @Published var selectedPersonID: UUID?
     @Published var selectedAppID: String?
+    @Published var selectedRoomID: UUID?
     @Published var manualBundleID = ""
     @Published var discoveryMessage: String?
 

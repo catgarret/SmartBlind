@@ -29,6 +29,9 @@ final class WindowSession {
     var processed: CGImage?
     var processedFrame: CapturedFrame?
     var renderInFlight = false
+    var processedKey = ""
+    /// 배경색 방식의 가림막 색 캐시 (가림막 ID → 위치 키, 프레임, 색)
+    var fillCache: [UUID: (key: String, frame: CapturedFrame?, color: CGColor)] = [:]
 
     // 화면 상태
     var onScreen = true

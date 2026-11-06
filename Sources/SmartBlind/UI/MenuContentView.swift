@@ -79,7 +79,7 @@ struct MenuContentView: View {
 
     private var stateText: String {
         if model.settings.paused { return "일시정지" }
-        if model.settings.activePeople.isEmpty { return "대상 없음" }
+        if !model.settings.hasTargets { return "대상 없음" }
         return model.status.running ? "작동 중" : "대기"
     }
 

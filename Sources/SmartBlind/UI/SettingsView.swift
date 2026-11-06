@@ -9,6 +9,8 @@ struct SettingsView: View {
         TabView {
             PeopleSettingsView()
                 .tabItem { Label("대상", systemImage: "person.crop.circle.badge.xmark") }
+            RoomsSettingsView()
+                .tabItem { Label("단체방", systemImage: "person.3.fill") }
             StyleSettingsView()
                 .tabItem { Label("블라인드", systemImage: "square.grid.3x3.fill") }
             RecognitionSettingsView()

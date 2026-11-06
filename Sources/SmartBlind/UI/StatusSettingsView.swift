@@ -43,7 +43,7 @@ struct StatusSettingsView: View {
 
     private var stateText: String {
         if model.settings.paused { return "일시정지" }
-        if model.settings.activePeople.isEmpty { return "대상 인물을 추가하세요" }
+        if !model.settings.hasTargets { return "가릴 사람이나 단체방을 추가하세요" }
         return model.status.running ? "작동 중" : "대기"
     }
 

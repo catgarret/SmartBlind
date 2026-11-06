@@ -4,7 +4,9 @@ import CoreImage.CIFilterBuiltins
 import CoreVideo
 import SmartBlindCore
 
-/// 모자이크/블러 이미지를 만든다. 창 전체를 한 번 처리한 뒤 가림막마다 잘라 쓴다 (GPU).
+/// 모자이크/블러 이미지를 만든다 (GPU).
+/// 가림막 영역마다 따로 처리해(영역 밖 픽셀은 쓰지 않음) 옆 줄·옆 말풍선 색이 번져 들어오지 않게 하고,
+/// 결과를 창 크기 이미지 한 장에 모아 오버레이가 잘라 쓴다.
 final class BlindRenderer {
     private let context = CIContext(options: [.cacheIntermediates: false])
     private let queue = DispatchQueue(label: "smartblind.render", qos: .userInteractive)
@@ -12,7 +14,8 @@ final class BlindRenderer {
     /// - scale: 버퍼 픽셀 / pt
     /// - completion: 메인 스레드
     /// - background: 창 배경색 (블러 막 색을 배경에 맞출 때)
-    func render(buffer: CVPixelBuffer, style: BlindStyle, scale: CGFloat, background: RGBA?,
+    /// - rects: 가림막 영역 (창 기준 pt, 왼쪽 위 원점)
+    func render(buffer: CVPixelBuffer, style: BlindStyle, scale: CGFloat, background: RGBA?, rects: [CGRect],
                 completion: @escaping (CGImage?) -> Void) {
         let kind = style.kind
         let cell = CGFloat(style.mosaicCell) * scale
@@ -27,9 +30,17 @@ final class BlindRenderer {
         }
         let veilColor = CIColor(red: base.red, green: base.green, blue: base.blue, alpha: veil)
         queue.async { [context] in
-            let input = CIImage(cvPixelBuffer: buffer)
-            let extent = input.extent
-            var output: CIImage?
+            let full = CIImage(cvPixelBuffer: buffer)
+            let fullExtent = full.extent
+            var composite = CIImage.empty()
+            for r in rects {
+                // pt(왼쪽 위 원점) → 버퍼 픽셀(CI는 왼쪽 아래 원점)
+                let px = CGRect(x: r.minX * scale, y: fullExtent.height - r.maxY * scale,
+                                width: r.width * scale, height: r.height * scale).integral.intersection(fullExtent)
+                guard !px.isNull, px.width >= 2, px.height >= 2 else { continue }
+                let input = full.cropped(to: px).clampedToExtent()
+                let extent = px
+                var output: CIImage?
             switch kind {
             case .mosaic:
                 let f = CIFilter.pixellate()
@@ -56,10 +67,12 @@ final class BlindRenderer {
                 let blurred = c.outputImage?.cropped(to: extent)
                 let veilImage = CIImage(color: veilColor).cropped(to: extent)
                 output = blurred.map { veilImage.composited(over: $0) }
-            case .solid, .image:
+            case .solid, .image, .background:
                 output = nil
             }
-            let cg = output.flatMap { context.createCGImage($0, from: extent) }
+                if let o = output?.cropped(to: extent) { composite = o.composited(over: composite) }
+            }
+            let cg = rects.isEmpty ? nil : context.createCGImage(composite, from: fullExtent)
             DispatchQueue.main.async { completion(cg) }
         }
     }

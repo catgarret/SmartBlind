@@ -14,7 +14,7 @@ public enum WindowKind: String, Sendable {
 }
 
 public enum RegionKind: String, Sendable {
-    case name, nameAvatar, block, row, line, card, custom, container, provisional
+    case name, nameAvatar, block, row, line, card, custom, container, provisional, room
 }
 
 /// 가려야 할 영역 (창 기준 좌표)
@@ -180,6 +180,8 @@ public struct LayoutAnalyzer {
         var runStart = -1, runMin = Int.max, runMax = Int.min, runLast = -1
         var y = Int(name.maxY) + 1
         var stop = false
+        /// 다음 사람(다음 줄)이 시작하는 y
+        var nextTop: Int?
         func closeRun() {
             if belongs(runMin, runMax) {
                 bottom = max(bottom, runLast + 1)
@@ -187,12 +189,14 @@ public struct LayoutAnalyzer {
                 lastEnd = runLast
             } else {
                 stop = true
+                nextTop = runStart
             }
             runStart = -1; runMin = Int.max; runMax = Int.min
         }
         while y < H && !stop {
             if nextSpeaker(y) {
                 if runStart >= 0 { closeRun() }
+                if nextTop == nil { nextTop = y }
                 break
             }
             if let (lo, hi) = rowExtent(y) {
@@ -208,11 +212,35 @@ public struct LayoutAnalyzer {
         }
         if runStart >= 0 && !stop { closeRun() }
 
+        // 이름 줄 오른쪽 끝(목록의 시간·안 읽은 수 등)도 오른쪽 끝 계산에 포함
+        var ny = max(0, Int(name.minY))
+        while ny <= min(H - 1, Int(name.maxY)) {
+            if let (_, hi) = rowExtent(ny) { right = max(right, hi) }
+            ny += 1
+        }
         let top = min(avatar.minY, name.minY)
         let bottomF = CGFloat(bottom)
-        let listLike = (bottomF - top) <= avatar.height * 1.8
-        let maxX = listLike ? CGFloat(W) - 4 : CGFloat(min(W, right + 1))
-        return (CGRect(x: avatar.minX, y: top, width: maxX - avatar.minX, height: bottomF - top), listLike)
+        // 목록 줄: 키가 프로필 사진 정도이고, 오른쪽 끝에 시간/안 읽은 수 같은 내용이 있음
+        // (대화방의 짧은 말풍선 한 줄은 오른쪽이 비어 있어 목록으로 보지 않음)
+        let listLike = (bottomF - top) <= avatar.height * 1.8 && right >= Int(Double(W) * 0.75)
+        if listLike {
+            // 목록 한 줄: 위/아래 줄과의 빈틈을 반씩 나눠 경계를 잡는다 → 옆 줄로 삐져나가지 않고 줄 모양 그대로
+            var prevBottom: Int?
+            var yy = Int(top) - 1
+            let limit = max(0, Int(top) - Int(avatar.height))
+            while yy >= limit {
+                if rowExtent(yy) != nil || nextSpeaker(yy) && CGFloat(yy) < avatar.minY - 3 { prevBottom = yy; break }
+                yy -= 1
+            }
+            let gapAbove = prevBottom.map { (top - CGFloat($0 + 1)) / 2 } ?? 4
+            let gapBelow = nextTop.map { (CGFloat($0) - bottomF) / 2 } ?? 4
+            let rowTop = max(0, top - max(0, min(gapAbove, 12)))
+            let rowBottom = min(CGFloat(H), bottomF + max(0, min(gapBelow, 12)))
+            let left = max(0, avatar.minX - 8)
+            return (CGRect(x: left, y: rowTop, width: CGFloat(W) - 4 - left, height: rowBottom - rowTop), true)
+        }
+        let maxX = CGFloat(min(W, right + 1))
+        return (CGRect(x: avatar.minX, y: top, width: maxX - avatar.minX, height: bottomF - top), false)
     }
 
     // MARK: 알림 카드

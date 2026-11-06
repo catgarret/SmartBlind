@@ -40,6 +40,16 @@ struct StyleSettingsView: View {
                         Text("강도가 높을수록 블러 위 반투명 막이 짙어져 사진·이모티콘 윤곽까지 거의 보이지 않습니다. 막 색은 메신저 배경색에 맞추거나 직접 고를 수 있습니다.")
                             .font(.caption).foregroundStyle(.secondary)
                     }
+                    if model.settings.style.kind == .background {
+                        LabeledContent("배경과 대비") {
+                            HStack {
+                                Slider(value: style.backgroundTint, in: 0...0.2, step: 0.01)
+                                Text("\(Int((model.settings.style.backgroundTint * 100).rounded()))%").monospacedDigit().frame(width: 44)
+                            }
+                        }
+                        Text("가린 자리를 주변 배경색으로 채워 메신저 화면에 자연스럽게 섞입니다. 0%면 배경과 완전히 같은 색(가린 줄 모를 정도), 올리면 가린 자리가 살짝 구분됩니다.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     if model.settings.style.kind == .blur {
                         Toggle("막 색을 메신저 배경색에 맞추기", isOn: style.veilMatchesBackground)
                     }
@@ -164,6 +174,10 @@ struct BlindPreview: View {
             MosaicSwatch(cell: style.mosaicCell).clipShape(r).padding(-style.padding)
         case .image:
             r.fill(Color(hex: style.colorHex).opacity(0.9)).overlay(Image(systemName: "photo").foregroundStyle(.white)).padding(-style.padding)
+        case .background:
+            r.fill(Color(nsColor: .textBackgroundColor))
+                .overlay(r.fill(Color.black.opacity(style.backgroundTint)))
+                .padding(-style.padding)
         }
     }
 }

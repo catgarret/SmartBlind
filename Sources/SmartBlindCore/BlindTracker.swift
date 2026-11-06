@@ -33,13 +33,17 @@ public final class BlindTracker {
 
     public init(windowSize: CGSize) { self.windowSize = windowSize }
 
-    /// 스크롤 영역 안에서 감지된 가림막을 스크롤 영역 밖으로 넘치지 않게 자름
+    /// 스크롤 영역 안에서 감지된 가림막이 위쪽 고정 영역(공지·제목줄)으로 넘치지 않게 윗부분만 자름.
+    /// (아래쪽은 입력창 크기에 따라 계속 바뀌므로 자르지 않음)
     public func clipToScrollArea(_ r: CGRect) -> CGRect? {
-        guard let a = scrollArea, a.contains(r.midY) else { return r }
-        let top = max(r.minY, a.lowerBound), bottom = min(r.maxY, a.upperBound)
-        guard bottom - top >= 2 else { return nil }
-        return CGRect(x: r.minX, y: top, width: r.width, height: bottom - top)
+        guard let a = scrollArea, r.midY >= a.lowerBound else { return r }
+        let top = max(r.minY, a.lowerBound)
+        guard r.maxY - top >= 2 else { return nil }
+        return CGRect(x: r.minX, y: top, width: r.width, height: r.maxY - top)
     }
+
+    /// 창 크기가 바뀌면 고정 영역 정보도 다시 배움
+    public func resetScrollArea() { scrollArea = nil }
 
     public var isEmpty: Bool { blinds.isEmpty }
 

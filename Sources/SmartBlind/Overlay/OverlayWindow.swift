@@ -4,12 +4,14 @@ import QuartzCore
 import SmartBlindCore
 
 /// 오버레이에 그릴 가림막 하나
-struct OverlayBlind: Equatable {
+struct OverlayBlind {
     let id: UUID
     /// 창 기준 좌표 (왼쪽 위 원점, 여백 포함)
     let rect: CGRect
     let revealed: Bool
     let provisional: Bool
+    /// 배경색 방식일 때 채울 색 (주변 배경에서 뽑음)
+    var fill: CGColor? = nil
 }
 
 /// 감시 중인 창 하나 위에 겹치는 투명 패널. 가림막은 이 패널 안의 레이어로 그린다.
@@ -225,7 +227,7 @@ final class OverlayWindow {
             bl.contentKey = nil
             layer.backgroundColor = color
         case .mosaic, .blur:
-            layer.backgroundColor = fallback
+            layer.backgroundColor = b.fill ?? fallback
             if let img = processed {
                 let key = "\(ObjectIdentifier(img).hashValue)|\(b.rect.integral)"
                 if bl.contentKey != key {
@@ -236,6 +238,10 @@ final class OverlayWindow {
                 layer.contents = nil
                 bl.contentKey = nil
             }
+        case .background:
+            layer.contents = nil
+            bl.contentKey = nil
+            layer.backgroundColor = b.fill ?? fallback
         case .image:
             bl.contentKey = nil
             if let img = customImage {

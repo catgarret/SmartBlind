@@ -182,6 +182,7 @@ final class LayoutTests: XCTestCase {
             paint(12, top, 48, top + 36, 120)                    // 프로필
             paint(58, top + 3, 100, top + 15, 40)                // 이름 글자
             paint(58, top + 21, 180, top + 31, 140)              // 상태메시지 글자
+            paint(270, top + 4, 296, top + 13, 150)              // 오른쪽 시간
             lines.append(TextLine(text: n, frame: CGRect(x: 58, y: top + 3, width: 42, height: 12)))
             lines.append(TextLine(text: "오늘도 화이팅", frame: CGRect(x: 58, y: top + 21, width: 122, height: 10)))
         }
@@ -279,5 +280,59 @@ final class ScrollAndTrackerTests: XCTestCase {
         XCTAssertEqual(s.style.padding, BlindStyle().padding)
         XCTAssertEqual(s.reveal, .seconds5)
         XCTAssertFalse(s.apps.isEmpty)
+    }
+}
+
+final class CoverPolicyTests: XCTestCase {
+    func hit(_ p: Person, kind: RegionKind, role: MatchRole = .header) -> DetectionHit {
+        DetectionHit(personID: p.id, alias: p.name, lineText: p.name, role: role,
+                     nameRect: CGRect(x: 60, y: 300, width: 40, height: 12),
+                     avatar: CGRect(x: 10, y: 298, width: 36, height: 36),
+                     region: CoverRegion(personID: p.id, rect: CGRect(x: 10, y: 298, width: 300, height: 120), kind: kind))
+    }
+    let size = CGSize(width: 400, height: 700)
+    let det = Detector(matcher: NameMatcher(people: [], mode: .word))
+    let title = [CoverPolicy.TitleLine(text: "디자인 2팀 11", frame: CGRect(x: 60, y: 40, width: 90, height: 14))]
+
+    func testListChatNotificationToggles() {
+        var p = Person(name: "홍길동"); p.hideInList = false
+        let s = AppSettings(people: [p])
+        let pol = CoverPolicy(settings: s)
+        XCTAssertTrue(pol.regions(hits: [hit(p, kind: .row)], windowKind: .normal, windowSize: size, titles: [], detector: det).isEmpty)
+        XCTAssertEqual(pol.regions(hits: [hit(p, kind: .block)], windowKind: .normal, windowSize: size, titles: [], detector: det).count, 1)
+        p.hideInNotifications = false
+        let pol2 = CoverPolicy(settings: AppSettings(people: [p]))
+        XCTAssertTrue(pol2.regions(hits: [hit(p, kind: .card)], windowKind: .notification, windowSize: size, titles: [], detector: det).isEmpty)
+    }
+
+    func testRoomScopeOnlyAndExcept() {
+        var p = Person(name: "홍길동"); p.roomScope = .only; p.rooms = ["디자인 2팀"]
+        var pol = CoverPolicy(settings: AppSettings(people: [p]))
+        XCTAssertEqual(pol.regions(hits: [hit(p, kind: .block)], windowKind: .normal, windowSize: size, titles: title, detector: det).count, 1)
+        XCTAssertTrue(pol.regions(hits: [hit(p, kind: .block)], windowKind: .normal, windowSize: size, titles: [], detector: det).isEmpty)
+        p.roomScope = .except
+        pol = CoverPolicy(settings: AppSettings(people: [p]))
+        XCTAssertTrue(pol.regions(hits: [hit(p, kind: .block)], windowKind: .normal, windowSize: size, titles: title, detector: det).isEmpty)
+    }
+
+    func testProfileOnlyPerPerson() {
+        var p = Person(name: "홍길동"); p.coverMode = .profileOnly
+        let r = CoverPolicy(settings: AppSettings(people: [p]))
+            .regions(hits: [hit(p, kind: .block)], windowKind: .normal, windowSize: size, titles: [], detector: det)
+        XCTAssertEqual(r.first?.kind, .nameAvatar)
+        XCTAssertLessThan(r.first!.rect.height, 50)
+    }
+
+    func testRoomHideInsideAndListRow() {
+        let room = Room(name: "디자인 2팀")
+        let pol = CoverPolicy(settings: AppSettings(rooms: [room]))
+        let inside = pol.regions(hits: [], windowKind: .normal, windowSize: size, titles: title, detector: det)
+        XCTAssertEqual(inside.first?.kind, .room)
+        XCTAssertGreaterThanOrEqual(inside.first!.rect.minY, 54)
+        XCTAssertEqual(inside.first!.rect.maxY, 700)
+        let rp = room.asPerson
+        let row = pol.regions(hits: [hit(rp, kind: .row)], windowKind: .normal, windowSize: size, titles: [], detector: det)
+        XCTAssertEqual(row.count, 1)
+        XCTAssertTrue(pol.regions(hits: [hit(rp, kind: .block)], windowKind: .normal, windowSize: size, titles: [], detector: det).isEmpty)
     }
 }

@@ -99,7 +99,7 @@ final class BlindEngine {
     func apply(_ new: AppSettings) {
         let old = settings
         settings = new
-        if old.people != new.people || old.recognition.matchMode != new.recognition.matchMode || old.apps != new.apps || old.coverMode != new.coverMode {
+        if old.people != new.people || old.rooms != new.rooms || old.recognition.matchMode != new.recognition.matchMode || old.apps != new.apps || old.coverMode != new.coverMode {
             detectors.removeAll()
             for s in sessions.values { s.dirty = true; s.lastDetectedSignature = nil }
         }
@@ -131,13 +131,13 @@ final class BlindEngine {
         if now - lastTick >= interval - 0.002 { tick(force: false) }
     }
 
-    private var isActive: Bool { running && !settings.paused && !settings.activePeople.isEmpty }
+    private var isActive: Bool { running && !settings.paused && settings.hasTargets }
 
     private func tick(force: Bool) {
         let now = CACurrentMediaTime()
         lastTick = now
         // 켜기/끄기 버튼은 일시정지 중에도 보여야 다시 켤 수 있다
-        let showButtons = running && settings.showToggleButton && !settings.activePeople.isEmpty
+        let showButtons = running && settings.showToggleButton && settings.hasTargets
         let snapshot: [WindowInfo]
         if showButtons || isActive {
             catalog.overlayWindowNumbers = Set(sessions.values.compactMap { s in
@@ -196,6 +196,7 @@ final class BlindEngine {
                         // 창 크기 변경: 캡처를 새 크기로 다시 시작 (크기를 바꾸는 동안은 0.25초씩 미룸)
                         // 기존 캡처 설정만 바꾸면 이전 크기로 축소된 프레임이 섞여 위치가 어긋날 수 있다
                         s.tracker.windowSize = w.frame.size
+                        s.tracker.resetScrollArea()
                         s.dirty = true
                         s.stream?.stop()
                         s.stream = nil
@@ -394,12 +395,8 @@ final class BlindEngine {
     private func detector(for s: WindowSession) -> Detector {
         let key = s.kind == .notification ? "#nc" : (s.info.bundleID ?? "#none")
         if let d = detectors[key] { return d }
-        let people: [Person]
-        if s.kind == .notification {
-            people = settings.people.filter { $0.enabled }   // 알림 배너는 어느 앱 알림인지 몰라 전체 적용
-        } else {
-            people = settings.people.filter { $0.applies(to: s.info.bundleID) }
-        }
+        // 알림 배너는 어느 앱 알림인지 몰라 전체 적용. 방 이름도 같은 매처로 찾는다
+        let people = CoverPolicy.matchTargets(settings: settings, bundleID: s.info.bundleID, notification: s.kind == .notification)
         let d = Detector(matcher: NameMatcher(people: people, mode: settings.recognition.matchMode))
         detectors[key] = d
         return d
@@ -485,7 +482,7 @@ final class BlindEngine {
         let kind = s.kind
         let pixels = frame?.pixels
         let hideMentions = rec.hideMentions
-        let profileOnly = settings.coverMode == .profileOnly
+        let policy = CoverPolicy(settings: settings)
         group.notify(queue: detectQueue) { [weak self, weak s] in
             let newOCR = box.ocr ?? []
             let ocrLines: [TextLine]
@@ -494,11 +491,14 @@ final class BlindEngine {
             } else {
                 ocrLines = newOCR
             }
-            // "이름·프로필만" 모드면 알림/토스트도 카드 전체가 아니라 이름+프로필만
-            let input = DetectionInput(windowSize: size, kind: profileOnly ? .normal : kind, lines: box.ax + ocrLines, image: pixels,
-                                       scope: profileOnly ? .nameAndAvatar : (kind == .normal ? (rule?.scope ?? .auto) : .auto),
+            let allLines = box.ax + ocrLines
+            let input = DetectionInput(windowSize: size, kind: kind, lines: allLines, image: pixels,
+                                       scope: kind == .normal ? (rule?.scope ?? .auto) : .auto,
                                        custom: rule?.custom ?? CustomInsets(), hideMentions: hideMentions)
-            let regions = det.detect(input)
+            // 사람별(목록/대화방/알림, 특정 방, 가림 방식)·방별 규칙 적용
+            let titles = CoverPolicy.titleCandidates(from: allLines, windowHeight: size.height)
+            let regions = policy.regions(hits: det.detectHits(input), windowKind: kind, windowSize: size,
+                                         titles: titles, detector: det)
             DispatchQueue.main.async {
                 guard let self, let s else { return }
                 self.finishDetection(s, regions: regions, ocrLines: ocrLines, signature: sigAtStart, size: size,
@@ -540,38 +540,57 @@ final class BlindEngine {
 
     // MARK: 그리기
 
+    /// 오버레이에 실제로 그릴 영역 (여백·스크롤 고정영역 보정 포함)
+    private func displayRect(_ b: TrackedBlind, in s: WindowSession) -> CGRect? {
+        let pad = CGFloat(settings.style.padding)
+        // 여백: + 바깥으로, − 안쪽으로 (너무 작아지면 최소 4pt 유지)
+        // 목록 줄·방 전체·알림 카드는 이미 경계가 정확해 바깥으로는 넓히지 않음 (옆 줄로 삐져나감 방지)
+        let tight = b.kind == .row || b.kind == .room || b.kind == .card || b.kind == .provisional
+        let p = tight ? min(0, pad) : pad
+        var r = b.rect.insetBy(dx: -p, dy: -p)
+        if r.width < 4 || r.height < 4 { r = b.rect.insetBy(dx: max(0, (b.rect.width - 4) / 2), dy: max(0, (b.rect.height - 4) / 2)) }
+        r = r.intersection(s.windowBounds)
+        if !b.provisional, let c = s.tracker.clipToScrollArea(r) { r = c }
+        guard !r.isNull, r.width >= 1, r.height >= 1 else { return nil }
+        return r
+    }
+
     private func requestRender(_ s: WindowSession) {
         let style = settings.style
         guard style.kind == .mosaic || style.kind == .blur, !s.tracker.isEmpty,
-              let frame = s.latest, !s.renderInFlight, s.processedFrame !== frame else { return }
+              let frame = s.latest, !s.renderInFlight else { return }
+        let rects = s.tracker.blinds.compactMap { displayRect($0, in: s) }
+        let key = rects.map { "\(Int($0.minX)),\(Int($0.minY)),\(Int($0.width)),\(Int($0.height))" }.joined(separator: ";")
+        guard s.processedFrame !== frame || s.processedKey != key else { return }
         s.renderInFlight = true
         let scale = CGFloat(CVPixelBufferGetWidth(frame.buffer)) / max(1, frame.pointSize.width)
         let background = style.kind == .blur && style.veilMatchesBackground
             ? frame.pixels.dominantColor(in: frame.pixels.bounds, step: 6) : nil
-        renderer.render(buffer: frame.buffer, style: style, scale: scale, background: background) { [weak self, weak s] img in
+        renderer.render(buffer: frame.buffer, style: style, scale: scale, background: background, rects: rects) { [weak self, weak s] img in
             guard let self, let s else { return }
             s.renderInFlight = false
             s.processed = img
             s.processedFrame = frame
+            s.processedKey = key
             self.refreshOverlay(s)
-            if let latest = s.latest, latest !== frame { self.requestRender(s) }
+            self.requestRender(s)   // 그 사이 프레임이나 위치가 바뀌었으면 다시
         }
     }
 
     private func refreshOverlay(_ s: WindowSession) {
         guard s.onScreen, isActive else { s.overlay.hide(); return }
         let style = settings.style
-        let pad = CGFloat(style.padding)
         let now = Date()
-        let bounds = s.windowBounds
+        let liveIDs = Set(s.tracker.blinds.map { $0.id })
+        if s.fillCache.count > liveIDs.count { s.fillCache = s.fillCache.filter { liveIDs.contains($0.key) } }
         let blinds: [OverlayBlind] = s.tracker.blinds.compactMap { b in
-            // 여백: + 바깥으로, − 안쪽으로 (너무 작아지면 최소 4pt 유지)
-            var r = b.rect.insetBy(dx: -pad, dy: -pad)
-            if r.width < 4 || r.height < 4 { r = b.rect.insetBy(dx: max(0, (b.rect.width - 4) / 2), dy: max(0, (b.rect.height - 4) / 2)) }
-            r = r.intersection(bounds)
-            if !b.provisional, let c = s.tracker.clipToScrollArea(r) { r = c }
-            guard !r.isNull, r.width >= 1, r.height >= 1 else { return nil }
-            return OverlayBlind(id: b.id, rect: r, revealed: b.isRevealed(at: now), provisional: b.provisional)
+            guard let r = displayRect(b, in: s) else { return nil }
+            var ob = OverlayBlind(id: b.id, rect: r, revealed: b.isRevealed(at: now), provisional: b.provisional)
+            // 배경색 방식의 채움색, 블러/모자이크가 준비되기 전 바탕색 (회색 대신 주변 배경색)
+            if style.kind == .background || style.kind == .blur || style.kind == .mosaic {
+                ob.fill = backgroundFill(for: b.id, rect: r, in: s, style: style)
+            }
+            return ob
         }
         // 처리 이미지 크기가 지금 창 크기와 다르면(크기 변경 직후) 쓰지 않음
         var processed: CGImage?
@@ -580,6 +599,26 @@ final class BlindEngine {
         s.overlay.update(frameCG: s.info.frame, level: s.panelLevel, blinds: blinds, occluders: s.occludersLocal,
                          style: style, processed: processed, customImage: customImage,
                          fallback: NSColor(calibratedWhite: 0.82, alpha: 1).cgColor, directClick: !clicks.isRunning)
+    }
+
+    /// 배경색 방식: 가림막 바로 바깥 테두리의 가장 흔한 색 + 살짝 대비
+    private func backgroundFill(for id: UUID, rect: CGRect, in s: WindowSession, style: BlindStyle) -> CGColor {
+        let key = "\(Int(rect.minX))|\(Int(rect.minY))|\(Int(rect.width))|\(Int(rect.height))|\(style.backgroundTint)"
+        if let cached = s.fillCache[id], cached.key == key, cached.frame === s.latest { return cached.color }
+        var color = NSColor(calibratedWhite: 0.95, alpha: 1).cgColor
+        if let px = s.latest?.pixels {
+            let c = px.dominantBorderColor(of: rect.insetBy(dx: -3, dy: -3))
+            if c.a >= 16 {
+                let r = Double(c.r) / 255, g = Double(c.g) / 255, b = Double(c.b) / 255
+                let lum = 0.299 * r + 0.587 * g + 0.114 * b
+                let t = max(0, min(0.3, style.backgroundTint))
+                // 밝은 배경은 살짝 어둡게, 어두운 배경은 살짝 밝게
+                func adj(_ v: Double) -> CGFloat { CGFloat(lum > 0.5 ? v * (1 - t) : v + (1 - v) * t) }
+                color = NSColor(srgbRed: adj(r), green: adj(g), blue: adj(b), alpha: 1).cgColor
+            }
+        }
+        s.fillCache[id] = (key, s.latest, color)
+        return color
     }
 
     // MARK: 클릭 공개

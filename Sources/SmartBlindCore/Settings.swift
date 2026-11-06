@@ -14,13 +14,33 @@ public struct Person: Codable, Identifiable, Hashable, Sendable {
     public var enabled: Bool
     /// 적용할 앱 번들 ID. 비어 있으면 감시 중인 모든 앱에 적용
     public var appBundleIDs: [String]
+    /// 대화 목록(채팅 목록·친구 목록)에서 가리기
+    public var hideInList: Bool
+    /// 대화방 안(말풍선·프로필)에서 가리기
+    public var hideInChat: Bool
+    /// 알림(macOS 배너·메신저 토스트)에서 가리기
+    public var hideInNotifications: Bool
+    /// 대화방 범위: 모든 방 / 지정한 방에서만 / 지정한 방 제외
+    public var roomScope: RoomScope
+    /// roomScope에 쓰는 방 이름들
+    public var rooms: [String]
+    /// 이 사람만 다른 가림 방식 (nil = 전체 설정 따름)
+    public var coverMode: CoverMode?
 
-    public init(id: UUID = UUID(), name: String, aliases: [String] = [], enabled: Bool = true, appBundleIDs: [String] = []) {
+    public init(id: UUID = UUID(), name: String, aliases: [String] = [], enabled: Bool = true, appBundleIDs: [String] = [],
+                hideInList: Bool = true, hideInChat: Bool = true, hideInNotifications: Bool = true,
+                roomScope: RoomScope = .all, rooms: [String] = [], coverMode: CoverMode? = nil) {
         self.id = id
         self.name = name
         self.aliases = aliases
         self.enabled = enabled
         self.appBundleIDs = appBundleIDs
+        self.hideInList = hideInList
+        self.hideInChat = hideInChat
+        self.hideInNotifications = hideInNotifications
+        self.roomScope = roomScope
+        self.rooms = rooms
+        self.coverMode = coverMode
     }
 
     /// 매칭에 쓰는 모든 이름 (대표 이름 + 별칭, 공백 제거·중복 제거)
@@ -45,7 +65,9 @@ public struct Person: Codable, Identifiable, Hashable, Sendable {
         return appBundleIDs.contains(bundleID)
     }
 
-    enum CodingKeys: String, CodingKey { case id, name, aliases, enabled, appBundleIDs }
+    enum CodingKeys: String, CodingKey {
+        case id, name, aliases, enabled, appBundleIDs, hideInList, hideInChat, hideInNotifications, roomScope, rooms, coverMode
+    }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -53,13 +75,64 @@ public struct Person: Codable, Identifiable, Hashable, Sendable {
         aliases = try c.decodeIfPresent([String].self, forKey: .aliases) ?? []
         enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
         appBundleIDs = try c.decodeIfPresent([String].self, forKey: .appBundleIDs) ?? []
+        hideInList = try c.decodeIfPresent(Bool.self, forKey: .hideInList) ?? true
+        hideInChat = try c.decodeIfPresent(Bool.self, forKey: .hideInChat) ?? true
+        hideInNotifications = try c.decodeIfPresent(Bool.self, forKey: .hideInNotifications) ?? true
+        roomScope = try c.decodeIfPresent(RoomScope.self, forKey: .roomScope) ?? .all
+        rooms = try c.decodeIfPresent([String].self, forKey: .rooms) ?? []
+        coverMode = try c.decodeIfPresent(CoverMode.self, forKey: .coverMode)
+    }
+}
+
+public enum RoomScope: String, Codable, CaseIterable, Sendable {
+    case all, only, except
+    public var title: String {
+        switch self {
+        case .all: return "모든 방"
+        case .only: return "지정한 방에서만"
+        case .except: return "지정한 방은 제외"
+        }
+    }
+}
+
+// MARK: - 단체방(대화방) 가림
+
+public struct Room: Codable, Identifiable, Hashable, Sendable {
+    public var id: UUID
+    /// 방 이름 (예: 디자인 2팀)
+    public var name: String
+    public var aliases: [String]
+    public var enabled: Bool
+    /// 대화 목록에서 이 방 줄을 가림
+    public var hideInList: Bool
+    /// 이 방을 열면 대화 내용 전체를 가림 (방 제목줄 아래)
+    public var hideInside: Bool
+
+    public init(id: UUID = UUID(), name: String, aliases: [String] = [], enabled: Bool = true,
+                hideInList: Bool = true, hideInside: Bool = true) {
+        self.id = id; self.name = name; self.aliases = aliases; self.enabled = enabled
+        self.hideInList = hideInList; self.hideInside = hideInside
+    }
+
+    /// 매칭용 (사람과 같은 매처를 쓰기 위해 Person 모양으로)
+    public var asPerson: Person { Person(id: id, name: name, aliases: aliases, enabled: enabled) }
+
+    enum CodingKeys: String, CodingKey { case id, name, aliases, enabled, hideInList, hideInside }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
+        name = try c.decodeIfPresent(String.self, forKey: .name) ?? ""
+        aliases = try c.decodeIfPresent([String].self, forKey: .aliases) ?? []
+        enabled = try c.decodeIfPresent(Bool.self, forKey: .enabled) ?? true
+        hideInList = try c.decodeIfPresent(Bool.self, forKey: .hideInList) ?? true
+        hideInside = try c.decodeIfPresent(Bool.self, forKey: .hideInside) ?? true
     }
 }
 
 // MARK: - 블라인드 스타일
 
 public enum BlindStyleKind: String, Codable, CaseIterable, Sendable {
-    case mosaic, blur, solid, image
+    case mosaic, blur, solid, image, background
 
     public var title: String {
         switch self {
@@ -67,6 +140,7 @@ public enum BlindStyleKind: String, Codable, CaseIterable, Sendable {
         case .blur: return "블러"
         case .solid: return "단색"
         case .image: return "이미지"
+        case .background: return "배경색"
         }
     }
 }
@@ -93,12 +167,15 @@ public struct BlindStyle: Codable, Equatable, Sendable {
     public var showRevealOutline: Bool
     /// 가림막 불투명도 (0.3 ~ 1.0). 낮추면 뒤가 살짝 비침
     public var opacity: Double
+    /// 배경색 방식에서 주변보다 얼마나 진하게(어두운 배경이면 밝게) 할지 (0 ~ 0.2). 0이면 배경과 완전히 같은 색
+    public var backgroundTint: Double
     /// 블러 위 반투명 막 색을 창 배경색에 맞춤 (끄면 colorHex 사용)
     public var veilMatchesBackground: Bool
 
     public init(kind: BlindStyleKind = .blur, intensity: Double = 0.9, cornerRadius: Double = 6, padding: Double = 3,
                 colorHex: String = "#D9D9DE", imagePath: String? = nil, imageMode: ImageFillMode = .fill,
-                showRevealOutline: Bool = true, veilMatchesBackground: Bool = true, opacity: Double = 1.0) {
+                showRevealOutline: Bool = true, veilMatchesBackground: Bool = true, opacity: Double = 1.0,
+                backgroundTint: Double = 0.04) {
         self.kind = kind
         self.intensity = intensity
         self.cornerRadius = cornerRadius
@@ -109,6 +186,7 @@ public struct BlindStyle: Codable, Equatable, Sendable {
         self.showRevealOutline = showRevealOutline
         self.veilMatchesBackground = veilMatchesBackground
         self.opacity = opacity
+        self.backgroundTint = backgroundTint
     }
 
     /// 모자이크 한 칸 크기 (pt). 강도 0 → 8pt, 1 → 32pt. 이름을 읽을 수 없도록 최소 8pt.
@@ -118,7 +196,7 @@ public struct BlindStyle: Codable, Equatable, Sendable {
     /// 블러 위에 덮는 반투명 막의 불투명도. 강도 0 → 0.2, 1 → 0.75 (사진 윤곽까지 거의 안 보이게)
     public var blurVeilOpacity: Double { 0.2 + 0.55 * max(0, min(1, intensity)) }
 
-    enum CodingKeys: String, CodingKey { case kind, intensity, cornerRadius, padding, colorHex, imagePath, imageMode, showRevealOutline, veilMatchesBackground, opacity }
+    enum CodingKeys: String, CodingKey { case kind, intensity, cornerRadius, padding, colorHex, imagePath, imageMode, showRevealOutline, veilMatchesBackground, opacity, backgroundTint }
     public init(from decoder: Decoder) throws {
         let d = BlindStyle()
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -132,6 +210,7 @@ public struct BlindStyle: Codable, Equatable, Sendable {
         showRevealOutline = try c.decodeIfPresent(Bool.self, forKey: .showRevealOutline) ?? d.showRevealOutline
         veilMatchesBackground = try c.decodeIfPresent(Bool.self, forKey: .veilMatchesBackground) ?? d.veilMatchesBackground
         opacity = try c.decodeIfPresent(Double.self, forKey: .opacity) ?? d.opacity
+        backgroundTint = try c.decodeIfPresent(Double.self, forKey: .backgroundTint) ?? d.backgroundTint
     }
 }
 
@@ -321,6 +400,8 @@ public struct RecognitionSettings: Codable, Equatable, Sendable {
 
 public struct AppSettings: Codable, Equatable, Sendable {
     public var people: [Person]
+    /// 가릴 단체방
+    public var rooms: [Room]
     public var apps: [AppRule]
     public var style: BlindStyle
     public var reveal: RevealDuration
@@ -331,9 +412,9 @@ public struct AppSettings: Codable, Equatable, Sendable {
     /// 메신저 창 오른쪽에 켜기/끄기 버튼 표시
     public var showToggleButton: Bool
 
-    public init(people: [Person] = [], apps: [AppRule] = AppSettings.defaultApps, style: BlindStyle = BlindStyle(),
+    public init(people: [Person] = [], rooms: [Room] = [], apps: [AppRule] = AppSettings.defaultApps, style: BlindStyle = BlindStyle(),
                 reveal: RevealDuration = .seconds5, recognition: RecognitionSettings = RecognitionSettings(), paused: Bool = false, coverMode: CoverMode = .conversation, showToggleButton: Bool = true) {
-        self.people = people; self.apps = apps; self.style = style; self.reveal = reveal
+        self.people = people; self.rooms = rooms; self.apps = apps; self.style = style; self.reveal = reveal
         self.recognition = recognition; self.paused = paused; self.coverMode = coverMode; self.showToggleButton = showToggleButton
     }
 
@@ -355,11 +436,15 @@ public struct AppSettings: Codable, Equatable, Sendable {
     }
 
     public var activePeople: [Person] { people.filter { $0.enabled && !$0.allNames.isEmpty } }
+    public var activeRooms: [Room] { rooms.filter { $0.enabled && !$0.asPerson.allNames.isEmpty } }
+    /// 가릴 대상(사람 또는 방)이 하나라도 있는지
+    public var hasTargets: Bool { !activePeople.isEmpty || !activeRooms.isEmpty }
 
-    enum CodingKeys: String, CodingKey { case people, apps, style, reveal, recognition, paused, coverMode, showToggleButton }
+    enum CodingKeys: String, CodingKey { case people, rooms, apps, style, reveal, recognition, paused, coverMode, showToggleButton }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         people = try c.decodeIfPresent([Person].self, forKey: .people) ?? []
+        rooms = try c.decodeIfPresent([Room].self, forKey: .rooms) ?? []
         apps = try c.decodeIfPresent([AppRule].self, forKey: .apps) ?? AppSettings.defaultApps
         style = try c.decodeIfPresent(BlindStyle.self, forKey: .style) ?? BlindStyle()
         reveal = try c.decodeIfPresent(RevealDuration.self, forKey: .reveal) ?? .seconds5
