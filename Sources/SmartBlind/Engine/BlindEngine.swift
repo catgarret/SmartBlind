@@ -663,10 +663,12 @@ final class BlindEngine {
     /// 가림막 자리의 배경색.
     /// 목록 줄은 그 줄의 가리지 않은 오른쪽 끝(스크롤 막대 옆)을 읽어, 선택(파랑)·마우스 올림(회색) 색을 그대로 따라감
     private func sampleBackground(_ rect: CGRect, kind: RegionKind, pixels px: PixelImage) -> RGBA {
-        if kind == .row {
-            let strip = CGRect(x: rect.maxX + 2, y: rect.minY + 3, width: CGFloat(px.width) - rect.maxX - 4, height: rect.height - 6)
-            if strip.width >= 3, strip.height >= 3 { return px.dominantColor(in: strip, step: 1) }
-        }
+        // 같은 높이의 가리지 않은 오른쪽 끝(스크롤 막대 옆) — 줄 선택·호버 색이 그대로 보이는 곳
+        let strip = CGRect(x: rect.maxX + 1, y: rect.minY + 2, width: min(14, CGFloat(px.width) - rect.maxX - 2), height: rect.height - 4)
+        if strip.width >= 3, strip.height >= 3 { return px.dominantColor(in: strip, step: 1) }
+        // 오른쪽 여백이 없으면 가림막 안쪽 왼쪽 끝 세로줄 (줄 배경), 그것도 안 되면 바깥 둘레
+        let inner = CGRect(x: rect.minX + 1, y: rect.minY + 2, width: 3, height: rect.height - 4)
+        if kind == .row, inner.height >= 3 { return px.dominantColor(in: inner, step: 1) }
         return px.dominantBorderColor(of: rect.insetBy(dx: -3, dy: -3))
     }
 
@@ -680,7 +682,7 @@ final class BlindEngine {
                 let r = Double(c.r) / 255, g = Double(c.g) / 255, b = Double(c.b) / 255
                 let lum = 0.299 * r + 0.587 * g + 0.114 * b
                 // 목록 줄은 줄 배경과 똑같이 (대비를 주면 오른쪽 끝 여백과 색이 달라 보임)
-                let t = kind == .row ? 0 : max(0, min(0.3, style.backgroundTint))
+                let t = (kind == .row || rect.maxX < CGFloat(px.width) - 4) ? 0 : max(0, min(0.3, style.backgroundTint))
                 // 밝은 배경은 살짝 어둡게, 어두운 배경은 살짝 밝게
                 func adj(_ v: Double) -> CGFloat { CGFloat(lum > 0.5 ? v * (1 - t) : v + (1 - v) * t) }
                 color = NSColor(srgbRed: adj(r), green: adj(g), blue: adj(b), alpha: 1).cgColor
