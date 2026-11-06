@@ -15,7 +15,8 @@ final class BlindRenderer {
     /// - completion: 메인 스레드
     /// - background: 창 배경색 (블러 막 색을 배경에 맞출 때)
     /// - rects: 가림막 영역 (창 기준 pt, 왼쪽 위 원점)
-    func render(buffer: CVPixelBuffer, style: BlindStyle, scale: CGFloat, background: RGBA?, rects: [CGRect],
+    /// - veils: 영역별 막 색 (목록 줄은 그 줄의 배경색: 선택·마우스 올림 색을 따라감). rects와 같은 순서
+    func render(buffer: CVPixelBuffer, style: BlindStyle, scale: CGFloat, background: RGBA?, rects: [CGRect], veils: [RGBA?] = [],
                 completion: @escaping (CGImage?) -> Void) {
         let kind = style.kind
         let cell = CGFloat(style.mosaicCell) * scale
@@ -29,11 +30,16 @@ final class BlindRenderer {
             base = Self.veilColor(hex: style.colorHex)
         }
         let veilColor = CIColor(red: base.red, green: base.green, blue: base.blue, alpha: veil)
+        let matchBackground = style.veilMatchesBackground
         queue.async { [context] in
             let full = CIImage(cvPixelBuffer: buffer)
             let fullExtent = full.extent
             var composite = CIImage.empty()
-            for r in rects {
+            for (index, r) in rects.enumerated() {
+                var veilColor = veilColor
+                if matchBackground, index < veils.count, let v = veils[index], v.a >= 16 {
+                    veilColor = CIColor(red: CGFloat(v.r) / 255, green: CGFloat(v.g) / 255, blue: CGFloat(v.b) / 255, alpha: veil)
+                }
                 // pt(왼쪽 위 원점) → 버퍼 픽셀(CI는 왼쪽 아래 원점)
                 let px = CGRect(x: r.minX * scale, y: fullExtent.height - r.maxY * scale,
                                 width: r.width * scale, height: r.height * scale).integral.intersection(fullExtent)

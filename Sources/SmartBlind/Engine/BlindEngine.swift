@@ -605,14 +605,22 @@ final class BlindEngine {
         let style = settings.style
         guard style.kind == .mosaic || style.kind == .blur, !s.tracker.isEmpty,
               let frame = s.latest, !s.renderInFlight else { return }
-        let rects = s.tracker.blinds.compactMap { displayRect($0, in: s) }
-        let key = rects.map { "\(Int($0.minX)),\(Int($0.minY)),\(Int($0.width)),\(Int($0.height))" }.joined(separator: ";")
+        var rects: [CGRect] = []
+        var veils: [RGBA?] = []
+        for b in s.tracker.blinds {
+            guard let r = displayRect(b, in: s) else { continue }
+            rects.append(r)
+            veils.append(sampleBackground(r, kind: b.kind, pixels: frame.pixels))
+        }
+        let key = zip(rects, veils).map { r, v in
+            "\(Int(r.minX)),\(Int(r.minY)),\(Int(r.width)),\(Int(r.height)),\(v?.quantKey ?? 0)"
+        }.joined(separator: ";")
         guard s.processedFrame !== frame || s.processedKey != key else { return }
         s.renderInFlight = true
         let scale = CGFloat(CVPixelBufferGetWidth(frame.buffer)) / max(1, frame.pointSize.width)
         let background = style.kind == .blur && style.veilMatchesBackground
             ? frame.pixels.dominantColor(in: frame.pixels.bounds, step: 6) : nil
-        renderer.render(buffer: frame.buffer, style: style, scale: scale, background: background, rects: rects) { [weak self, weak s] img in
+        renderer.render(buffer: frame.buffer, style: style, scale: scale, background: background, rects: rects, veils: veils) { [weak self, weak s] img in
             guard let self, let s else { return }
             s.renderInFlight = false
             s.processed = img
@@ -638,7 +646,7 @@ final class BlindEngine {
             ob.holes = b.holes.map { $0.offsetBy(dx: b.rect.minX - r.minX, dy: b.rect.minY - r.minY) }
             // 배경색 방식의 채움색, 블러/모자이크가 준비되기 전 바탕색 (회색 대신 주변 배경색)
             if style.kind == .background || style.kind == .blur || style.kind == .mosaic {
-                ob.fill = backgroundFill(for: b.id, rect: r, in: s, style: style)
+                ob.fill = backgroundFill(for: b.id, rect: r, kind: b.kind, in: s, style: style)
             }
             return ob
         }
@@ -652,16 +660,27 @@ final class BlindEngine {
     }
 
     /// 배경색 방식: 가림막 바로 바깥 테두리의 가장 흔한 색 + 살짝 대비
-    private func backgroundFill(for id: UUID, rect: CGRect, in s: WindowSession, style: BlindStyle) -> CGColor {
+    /// 가림막 자리의 배경색.
+    /// 목록 줄은 그 줄의 가리지 않은 오른쪽 끝(스크롤 막대 옆)을 읽어, 선택(파랑)·마우스 올림(회색) 색을 그대로 따라감
+    private func sampleBackground(_ rect: CGRect, kind: RegionKind, pixels px: PixelImage) -> RGBA {
+        if kind == .row {
+            let strip = CGRect(x: rect.maxX + 2, y: rect.minY + 3, width: CGFloat(px.width) - rect.maxX - 4, height: rect.height - 6)
+            if strip.width >= 3, strip.height >= 3 { return px.dominantColor(in: strip, step: 1) }
+        }
+        return px.dominantBorderColor(of: rect.insetBy(dx: -3, dy: -3))
+    }
+
+    private func backgroundFill(for id: UUID, rect: CGRect, kind: RegionKind, in s: WindowSession, style: BlindStyle) -> CGColor {
         let key = "\(Int(rect.minX))|\(Int(rect.minY))|\(Int(rect.width))|\(Int(rect.height))|\(style.backgroundTint)"
         if let cached = s.fillCache[id], cached.key == key, cached.frame === s.latest { return cached.color }
         var color = NSColor(calibratedWhite: 0.95, alpha: 1).cgColor
         if let px = s.latest?.pixels {
-            let c = px.dominantBorderColor(of: rect.insetBy(dx: -3, dy: -3))
+            let c = sampleBackground(rect, kind: kind, pixels: px)
             if c.a >= 16 {
                 let r = Double(c.r) / 255, g = Double(c.g) / 255, b = Double(c.b) / 255
                 let lum = 0.299 * r + 0.587 * g + 0.114 * b
-                let t = max(0, min(0.3, style.backgroundTint))
+                // 목록 줄은 줄 배경과 똑같이 (대비를 주면 오른쪽 끝 여백과 색이 달라 보임)
+                let t = kind == .row ? 0 : max(0, min(0.3, style.backgroundTint))
                 // 밝은 배경은 살짝 어둡게, 어두운 배경은 살짝 밝게
                 func adj(_ v: Double) -> CGFloat { CGFloat(lum > 0.5 ? v * (1 - t) : v + (1 - v) * t) }
                 color = NSColor(srgbRed: adj(r), green: adj(g), blue: adj(b), alpha: 1).cgColor
