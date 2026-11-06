@@ -15,9 +15,11 @@ struct PeopleSettingsView: View {
                             Image(systemName: p.enabled ? "eye.slash.fill" : "eye")
                                 .foregroundStyle(p.enabled ? Color.accentColor : Color.secondary)
                             VStack(alignment: .leading, spacing: 1) {
-                                Text(p.name.isEmpty ? "(이름 없음)" : p.name)
-                                if !p.aliases.filter({ !$0.isEmpty }).isEmpty {
-                                    Text(p.aliases.filter { !$0.isEmpty }.joined(separator: ", ")).font(.caption).foregroundStyle(.secondary).lineLimit(1)
+                                Text(NameMask.display(name: p.name, nickname: p.nickname, reveal: model.revealNamesInSettings))
+                                let aliasCount = p.aliases.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }.count
+                                if aliasCount > 0 {
+                                    Text(model.revealNamesInSettings ? p.aliases.filter { !$0.isEmpty }.joined(separator: ", ") : "별칭 \(aliasCount)개")
+                                        .font(.caption).foregroundStyle(.secondary).lineLimit(1)
                                 }
                             }
                         }
@@ -30,6 +32,7 @@ struct PeopleSettingsView: View {
                     Button { removeSelected() } label: { Image(systemName: "minus") }
                         .disabled(model.selectedPersonID == nil)
                     Spacer()
+                    RevealNamesButton()
                 }
                 .buttonStyle(.borderless)
                 .padding(.top, 6)
@@ -41,7 +44,7 @@ struct PeopleSettingsView: View {
                 PersonEditor(person: Binding(
                     get: { model.settings.people.first(where: { $0.id == sel }) ?? Person(id: sel, name: "") },
                     set: { new in if let i = model.settings.people.firstIndex(where: { $0.id == sel }) { model.settings.people[i] = new } }
-                ), apps: model.settings.apps)
+                ), apps: model.settings.apps, reveal: model.revealNamesInSettings)
                 .id(sel)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
@@ -70,12 +73,20 @@ struct PeopleSettingsView: View {
 struct PersonEditor: View {
     @Binding var person: Person
     let apps: [AppRule]
+    /// 실제 이름 보기 (꺼져 있으면 이름 입력칸을 점으로 가림)
+    var reveal: Bool = false
 
     var body: some View {
         Form {
             Section {
-                TextField("대표 이름", text: $person.name, prompt: Text("예: 홍길동"))
-                TextField("별칭", text: .commaList($person.aliases), prompt: Text("예: hong123, 길동  (쉼표로 구분)"))
+                TextField("설정에서 보일 별명", text: $person.nickname, prompt: Text("예: 그분, A  (비우면 홍*동처럼 가려 보임)"))
+                if reveal {
+                    TextField("대표 이름", text: $person.name, prompt: Text("예: 홍길동"))
+                    TextField("별칭", text: .commaList($person.aliases), prompt: Text("예: hong123, 길동  (쉼표로 구분)"))
+                } else {
+                    SecureField("대표 이름", text: $person.name, prompt: Text("입력해도 점으로 가려집니다"))
+                    SecureField("별칭", text: .commaList($person.aliases), prompt: Text("쉼표로 구분 (점으로 가려짐)"))
+                }
                 HStack {
                     Button("별칭 추천") { suggestAliases() }
                         .disabled(person.name.trimmingCharacters(in: .whitespaces).count < 3)

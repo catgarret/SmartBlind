@@ -32,11 +32,14 @@ public struct Person: Codable, Identifiable, Hashable, Sendable {
     public var showLabel: Bool
     /// 가린 줄의 안 읽은 메시지 수 배지는 보이게
     public var showUnreadBadge: Bool
+    /// 설정 화면에서 실제 이름 대신 보일 별명 (예: 그분, A)
+    public var nickname: String
 
     public init(id: UUID = UUID(), name: String, aliases: [String] = [], enabled: Bool = true, appBundleIDs: [String] = [],
                 hideInList: Bool = true, hideInChat: Bool = true, hideInNotifications: Bool = true,
                 roomScope: RoomScope = .all, rooms: [String] = [], coverMode: CoverMode? = nil,
-                listLabel: String = "", showLabel: Bool = true, showUnreadBadge: Bool = true) {
+                listLabel: String = "", showLabel: Bool = true, showUnreadBadge: Bool = true, nickname: String = "") {
+        self.nickname = nickname
         self.id = id
         self.name = name
         self.aliases = aliases
@@ -77,7 +80,7 @@ public struct Person: Codable, Identifiable, Hashable, Sendable {
 
     enum CodingKeys: String, CodingKey {
         case id, name, aliases, enabled, appBundleIDs, hideInList, hideInChat, hideInNotifications, roomScope, rooms, coverMode
-        case listLabel, showLabel, showUnreadBadge
+        case listLabel, showLabel, showUnreadBadge, nickname
     }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -95,6 +98,29 @@ public struct Person: Codable, Identifiable, Hashable, Sendable {
         listLabel = try c.decodeIfPresent(String.self, forKey: .listLabel) ?? ""
         showLabel = try c.decodeIfPresent(Bool.self, forKey: .showLabel) ?? true
         showUnreadBadge = try c.decodeIfPresent(Bool.self, forKey: .showUnreadBadge) ?? true
+        nickname = try c.decodeIfPresent(String.self, forKey: .nickname) ?? ""
+    }
+}
+
+/// 설정 화면에서 이름을 직접 보이지 않게 하는 도우미
+public enum NameMask {
+    /// "홍길동" → "홍*동", "길동" → "길*", "hong123" → "h*****3"
+    public static func mask(_ s: String) -> String {
+        let c = Array(s.trimmingCharacters(in: .whitespaces))
+        switch c.count {
+        case 0: return ""
+        case 1: return "*"
+        case 2: return String(c[0]) + "*"
+        default: return String(c[0]) + String(repeating: "*", count: c.count - 2) + String(c[c.count - 1])
+        }
+    }
+
+    /// 목록에 보일 이름: 별명이 있으면 별명, 없으면 가운데를 가린 이름
+    public static func display(name: String, nickname: String, reveal: Bool) -> String {
+        if reveal { return name.isEmpty ? "(이름 없음)" : name }
+        let n = nickname.trimmingCharacters(in: .whitespaces)
+        if !n.isEmpty { return n }
+        return name.isEmpty ? "(이름 없음)" : mask(name)
     }
 }
 
@@ -126,10 +152,13 @@ public struct Room: Codable, Identifiable, Hashable, Sendable {
     public var showLabel: Bool
     /// 가린 줄의 안 읽은 메시지 수 배지는 보이게
     public var showUnreadBadge: Bool
+    /// 설정 화면에서 실제 방 이름 대신 보일 별명
+    public var nickname: String
 
     public init(id: UUID = UUID(), name: String, aliases: [String] = [], enabled: Bool = true,
                 hideInList: Bool = true, hideInside: Bool = true,
-                listLabel: String = "", showLabel: Bool = true, showUnreadBadge: Bool = true) {
+                listLabel: String = "", showLabel: Bool = true, showUnreadBadge: Bool = true, nickname: String = "") {
+        self.nickname = nickname
         self.id = id; self.name = name; self.aliases = aliases; self.enabled = enabled
         self.hideInList = hideInList; self.hideInside = hideInside
         self.listLabel = listLabel; self.showLabel = showLabel; self.showUnreadBadge = showUnreadBadge
@@ -144,7 +173,7 @@ public struct Room: Codable, Identifiable, Hashable, Sendable {
     /// 매칭용 (사람과 같은 매처를 쓰기 위해 Person 모양으로)
     public var asPerson: Person { Person(id: id, name: name, aliases: aliases, enabled: enabled) }
 
-    enum CodingKeys: String, CodingKey { case id, name, aliases, enabled, hideInList, hideInside, listLabel, showLabel, showUnreadBadge }
+    enum CodingKeys: String, CodingKey { case id, name, aliases, enabled, hideInList, hideInside, listLabel, showLabel, showUnreadBadge, nickname }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decodeIfPresent(UUID.self, forKey: .id) ?? UUID()
@@ -156,6 +185,7 @@ public struct Room: Codable, Identifiable, Hashable, Sendable {
         listLabel = try c.decodeIfPresent(String.self, forKey: .listLabel) ?? ""
         showLabel = try c.decodeIfPresent(Bool.self, forKey: .showLabel) ?? true
         showUnreadBadge = try c.decodeIfPresent(Bool.self, forKey: .showUnreadBadge) ?? true
+        nickname = try c.decodeIfPresent(String.self, forKey: .nickname) ?? ""
     }
 }
 
@@ -199,6 +229,8 @@ public struct BlindStyle: Codable, Equatable, Sendable {
     public var opacity: Double
     /// 배경색 방식에서 주변보다 얼마나 진하게(어두운 배경이면 밝게) 할지 (0 ~ 0.2). 0이면 배경과 완전히 같은 색
     public var backgroundTint: Double
+    /// 목록 줄은 클릭을 메신저로 그대로 보냄 (더블클릭으로 방 열기). 잠깐 보기는 Option+클릭
+    public var listClickOpens: Bool
     /// 마우스를 올리면 반투명해져 살짝 보이게
     public var hoverPeek: Bool
     /// 마우스를 올렸을 때 불투명도 (0.1 ~ 0.9)
@@ -209,7 +241,9 @@ public struct BlindStyle: Codable, Equatable, Sendable {
     public init(kind: BlindStyleKind = .blur, intensity: Double = 0.9, cornerRadius: Double = 6, padding: Double = 3,
                 colorHex: String = "#D9D9DE", imagePath: String? = nil, imageMode: ImageFillMode = .fill,
                 showRevealOutline: Bool = true, veilMatchesBackground: Bool = true, opacity: Double = 1.0,
-                backgroundTint: Double = 0.04, hoverPeek: Bool = false, hoverPeekOpacity: Double = 0.45) {
+                backgroundTint: Double = 0.04, hoverPeek: Bool = false, hoverPeekOpacity: Double = 0.45,
+                listClickOpens: Bool = true) {
+        self.listClickOpens = listClickOpens
         self.kind = kind
         self.intensity = intensity
         self.cornerRadius = cornerRadius
@@ -232,7 +266,7 @@ public struct BlindStyle: Codable, Equatable, Sendable {
     /// 블러 위에 덮는 반투명 막의 불투명도. 강도 0 → 0.2, 1 → 0.75 (사진 윤곽까지 거의 안 보이게)
     public var blurVeilOpacity: Double { 0.2 + 0.55 * max(0, min(1, intensity)) }
 
-    enum CodingKeys: String, CodingKey { case kind, intensity, cornerRadius, padding, colorHex, imagePath, imageMode, showRevealOutline, veilMatchesBackground, opacity, backgroundTint, hoverPeek, hoverPeekOpacity }
+    enum CodingKeys: String, CodingKey { case kind, intensity, cornerRadius, padding, colorHex, imagePath, imageMode, showRevealOutline, veilMatchesBackground, opacity, backgroundTint, hoverPeek, hoverPeekOpacity, listClickOpens }
     public init(from decoder: Decoder) throws {
         let d = BlindStyle()
         let c = try decoder.container(keyedBy: CodingKeys.self)
@@ -248,6 +282,7 @@ public struct BlindStyle: Codable, Equatable, Sendable {
         opacity = try c.decodeIfPresent(Double.self, forKey: .opacity) ?? d.opacity
         backgroundTint = try c.decodeIfPresent(Double.self, forKey: .backgroundTint) ?? d.backgroundTint
         hoverPeek = try c.decodeIfPresent(Bool.self, forKey: .hoverPeek) ?? d.hoverPeek
+        listClickOpens = try c.decodeIfPresent(Bool.self, forKey: .listClickOpens) ?? d.listClickOpens
         hoverPeekOpacity = try c.decodeIfPresent(Double.self, forKey: .hoverPeekOpacity) ?? d.hoverPeekOpacity
     }
 }

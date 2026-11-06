@@ -21,6 +21,8 @@ final class AppModel: ObservableObject {
     @Published var selectedPersonID: UUID?
     @Published var selectedAppID: String?
     @Published var selectedRoomID: UUID?
+    /// 설정 화면에서 실제 이름 보기 (설정 창을 닫으면 다시 가려짐, 저장 안 함)
+    @Published var revealNamesInSettings = false
     @Published var manualBundleID = ""
     @Published var discoveryMessage: String?
 

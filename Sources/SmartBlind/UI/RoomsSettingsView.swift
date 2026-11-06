@@ -14,7 +14,7 @@ struct RoomsSettingsView: View {
                         HStack {
                             Image(systemName: r.enabled ? "eye.slash.fill" : "eye")
                                 .foregroundStyle(r.enabled ? Color.accentColor : Color.secondary)
-                            Text(r.name.isEmpty ? "(이름 없음)" : r.name)
+                            Text(NameMask.display(name: r.name, nickname: r.nickname, reveal: model.revealNamesInSettings))
                         }
                         .tag(r.id)
                     }
@@ -25,6 +25,7 @@ struct RoomsSettingsView: View {
                     Button { removeRoom() } label: { Image(systemName: "minus") }
                         .disabled(model.selectedRoomID == nil)
                     Spacer()
+                    RevealNamesButton()
                 }
                 .buttonStyle(.borderless)
                 .padding(.top, 6)
@@ -35,7 +36,7 @@ struct RoomsSettingsView: View {
                 RoomEditor(room: Binding(
                     get: { model.settings.rooms.first(where: { $0.id == sel }) ?? Room(id: sel, name: "") },
                     set: { new in if let i = model.settings.rooms.firstIndex(where: { $0.id == sel }) { model.settings.rooms[i] = new } }
-                ))
+                ), reveal: model.revealNamesInSettings)
                 .id(sel)
             } else {
                 VStack(alignment: .leading, spacing: 8) {
@@ -63,12 +64,19 @@ struct RoomsSettingsView: View {
 
 struct RoomEditor: View {
     @Binding var room: Room
+    var reveal: Bool = false
 
     var body: some View {
         Form {
             Section {
-                TextField("방 이름", text: $room.name, prompt: Text("예: 디자인 2팀"))
-                TextField("다른 이름", text: .commaList($room.aliases), prompt: Text("방 이름이 바뀌었거나 줄여 부르는 이름 (쉼표로 구분)"))
+                TextField("설정에서 보일 별명", text: $room.nickname, prompt: Text("예: 업무방  (비우면 디*팀처럼 가려 보임)"))
+                if reveal {
+                    TextField("방 이름", text: $room.name, prompt: Text("예: 디자인 2팀"))
+                    TextField("다른 이름", text: .commaList($room.aliases), prompt: Text("방 이름이 바뀌었거나 줄여 부르는 이름 (쉼표로 구분)"))
+                } else {
+                    SecureField("방 이름", text: $room.name, prompt: Text("입력해도 점으로 가려집니다"))
+                    SecureField("다른 이름", text: .commaList($room.aliases), prompt: Text("쉼표로 구분 (점으로 가려짐)"))
+                }
                 Toggle("이 방 가리기", isOn: $room.enabled)
             } header: {
                 Text("방")

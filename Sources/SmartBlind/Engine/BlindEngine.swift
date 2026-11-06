@@ -424,6 +424,12 @@ final class BlindEngine {
         } else {
             s.dirty = true
         }
+        // 안 읽은 수 배지: 새 메시지가 오면 인식을 기다리지 않고 바로 뚫어 보이게
+        let layout = LayoutAnalyzer(image: frame.pixels, size: frame.pointSize)
+        s.tracker.updateHoles { b in
+            guard let badge = layout.findBadge(in: b.rect) else { return [] }
+            return [badge.offsetBy(dx: -b.rect.minX, dy: -b.rect.minY)]
+        }
         requestRender(s)
         refreshOverlay(s)
         updateClickTargets()
@@ -628,6 +634,7 @@ final class BlindEngine {
             var ob = OverlayBlind(id: b.id, rect: r, revealed: b.isRevealed(at: now), provisional: b.provisional)
             ob.label = b.label
             ob.hovered = style.hoverPeek && b.id == hoveredBlind
+            ob.passThrough = style.listClickOpens && b.kind == .row
             ob.holes = b.holes.map { $0.offsetBy(dx: b.rect.minX - r.minX, dy: b.rect.minY - r.minY) }
             // 배경색 방식의 채움색, 블러/모자이크가 준비되기 전 바탕색 (회색 대신 주변 배경색)
             if style.kind == .background || style.kind == .blur || style.kind == .mosaic {
@@ -695,8 +702,10 @@ final class BlindEngine {
             for b in s.tracker.blinds {
                 let r = b.rect.insetBy(dx: -pad, dy: -pad).intersection(s.windowBounds)
                 guard !r.isNull else { continue }
-                targets.append(.init(windowID: s.id, blindID: b.id, rect: r.offsetBy(dx: origin.x, dy: origin.y),
-                                     occluders: s.occludersGlobal))
+                var t = ClickInterceptor.Target(windowID: s.id, blindID: b.id, rect: r.offsetBy(dx: origin.x, dy: origin.y),
+                                                occluders: s.occludersGlobal)
+                t.passThrough = settings.style.listClickOpens && b.kind == .row
+                targets.append(t)
             }
         }
         clicks.setTargets(targets)

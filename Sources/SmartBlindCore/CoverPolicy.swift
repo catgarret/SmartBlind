@@ -70,6 +70,7 @@ public struct CoverPolicy: Sendable {
                     var r = region
                     r.label = room.showLabel ? room.displayLabel : nil
                     if !room.showUnreadBadge { r.holes = [] }
+                    r.badgeAllowed = room.showUnreadBadge
                     out.append(r)
                 }
                 continue
@@ -100,6 +101,7 @@ public struct CoverPolicy: Sendable {
                     let l = p.listLabel.trimmingCharacters(in: .whitespaces)
                     r.label = p.showLabel ? (l.isEmpty ? "가려진 대화" : l) : nil
                     if !p.showUnreadBadge { r.holes = [] }
+                    r.badgeAllowed = p.showUnreadBadge
                 } else {
                     r.holes = []
                 }

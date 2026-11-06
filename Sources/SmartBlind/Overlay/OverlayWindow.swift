@@ -18,6 +18,8 @@ struct OverlayBlind {
     var holes: [CGRect] = []
     /// 마우스가 올라가 있음 (살짝 보기)
     var hovered = false
+    /// 클릭을 메신저로 그대로 보냄 (목록 줄)
+    var passThrough = false
 }
 
 /// 감시 중인 창 하나 위에 겹치는 투명 패널. 가림막은 이 패널 안의 레이어로 그린다.
@@ -146,7 +148,7 @@ final class OverlayWindow {
             maskLayer.fillRule = .nonZero
             root.mask = maskLayer
         }
-        host.hitRects = directClick ? blinds.map { $0.rect } : []
+        host.hitRects = directClick ? blinds.filter { !$0.passThrough }.map { $0.rect } : []
         CATransaction.commit()
 
         if blinds.isEmpty {

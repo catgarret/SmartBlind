@@ -26,6 +26,8 @@ public struct CoverRegion: Equatable, Sendable {
     public var label: String?
     /// 가리지 않고 뚫어 둘 곳 (안 읽은 메시지 수 배지 등). rect 왼쪽 위 기준 좌표
     public var holes: [CGRect]
+    /// 안 읽은 수 배지를 매 프레임 다시 찾아 뚫어 둘지 (목록 줄)
+    public var badgeAllowed: Bool = false
 
     public init(personID: UUID?, rect: CGRect, kind: RegionKind, label: String? = nil, holes: [CGRect] = []) {
         self.personID = personID
@@ -270,9 +272,9 @@ public struct LayoutAnalyzer {
                 }
             }
         }
-        guard n >= 30 else { return nil }
+        guard n >= 20 else { return nil }
         let w = CGFloat(maxX - minX + 1), h = CGFloat(maxY - minY + 1)
-        guard h >= 10, h <= 32, w >= 10, w <= 70, CGFloat(n) >= 0.35 * w * h else { return nil }
+        guard h >= 8, h <= 36, w >= 8, w <= 80, CGFloat(n) >= 0.35 * w * h else { return nil }
         return CGRect(x: CGFloat(minX), y: CGFloat(minY), width: w, height: h).insetBy(dx: -2, dy: -2)
     }
 

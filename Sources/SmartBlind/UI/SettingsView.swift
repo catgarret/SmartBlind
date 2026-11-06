@@ -38,6 +38,23 @@ extension Binding where Value == String {
     }
 }
 
+/// 설정 화면에서 실제 이름 보기/가리기
+struct RevealNamesButton: View {
+    @EnvironmentObject var model: AppModel
+    var body: some View {
+        Button {
+            model.revealNamesInSettings.toggle()
+        } label: {
+            Label(model.revealNamesInSettings ? "이름 가리기" : "이름 보기",
+                  systemImage: model.revealNamesInSettings ? "eye.slash" : "eye")
+                .labelStyle(.titleAndIcon)
+                .font(.caption)
+        }
+        .buttonStyle(.borderless)
+        .help("설정 창에서 실제 이름을 잠깐 보거나 다시 가립니다. 설정 창을 닫으면 자동으로 다시 가려집니다.")
+    }
+}
+
 struct SectionHeader: View {
     let title: String
     var subtitle: String?

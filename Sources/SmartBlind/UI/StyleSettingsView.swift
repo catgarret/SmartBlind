@@ -98,6 +98,11 @@ struct StyleSettingsView: View {
                         ForEach(RevealDuration.allCases, id: \.self) { Text($0.title).tag($0) }
                     }
                     Toggle("공개 중 얇은 테두리 표시", isOn: style.showRevealOutline)
+                    Toggle("목록 줄은 클릭을 메신저로 보내기 (더블클릭으로 방 열기)", isOn: style.listClickOpens)
+                    if model.settings.style.listClickOpens {
+                        Text("가린 목록 줄은 클릭·더블클릭이 메신저로 그대로 가고, 잠깐 보려면 Option+클릭하세요.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    }
                     Toggle("마우스를 올리면 반투명하게 살짝 보기", isOn: style.hoverPeek)
                     if model.settings.style.hoverPeek {
                         LabeledContent("올렸을 때 불투명도") {
@@ -111,7 +116,7 @@ struct StyleSettingsView: View {
                 } header: {
                     Text("클릭해서 보기")
                 } footer: {
-                    Text("가림막을 클릭하면 잠시 보이고, 다시 클릭하거나 시간이 지나면 가려집니다. Option+클릭은 가림막을 통과해 메신저에 그대로 전달됩니다(예: 사진 열기). 스크롤은 항상 그대로 동작합니다.")
+                    Text("대화 가림막은 클릭하면 잠시 보이고, 다시 클릭하거나 시간이 지나면 가려집니다. Option+클릭은 메신저에 그대로 전달됩니다(예: 사진 열기). 목록 줄은 아래 설정에 따라 반대로 동작합니다. 스크롤은 항상 그대로 동작합니다.")
                         .font(.caption).foregroundStyle(.secondary)
                 }
             }

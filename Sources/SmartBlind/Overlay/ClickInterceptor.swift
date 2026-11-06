@@ -15,6 +15,8 @@ final class ClickInterceptor {
         let rect: CGRect
         /// 이 가림막을 덮고 있는 다른 창 (CG 전역)
         let occluders: [CGRect]
+        /// 일반 클릭은 메신저로 보내고(목록 줄 더블클릭으로 열기), Option+클릭으로 잠깐 보기
+        var passThrough: Bool = false
     }
 
     /// 메인 스레드에서 호출
@@ -87,9 +89,10 @@ final class ClickInterceptor {
             let hit = targets.last { $0.rect.contains(p) && !$0.occluders.contains(where: { $0.contains(p) }) }
             lock.unlock()
             guard let hit else { return Unmanaged.passUnretained(event) }
-            if event.flags.contains(.maskAlternate) {
-                // 원래 메신저로 전달 (Option 키는 떼고)
-                event.flags = event.flags.subtracting(.maskAlternate)
+            let option = event.flags.contains(.maskAlternate)
+            if hit.passThrough != option {
+                // 메신저로 전달: 목록 줄의 일반 클릭(선택·더블클릭으로 열기), 또는 대화 가림막의 Option+클릭
+                if option { event.flags = event.flags.subtracting(.maskAlternate) }
                 return Unmanaged.passUnretained(event)
             }
             swallowing = true

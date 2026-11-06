@@ -13,6 +13,7 @@ public struct TrackedBlind: Identifiable, Equatable, Sendable {
     /// 대체 글자 / 뚫어 둘 곳 (rect 기준 좌표)
     public var label: String?
     public var holes: [CGRect]
+    public var badgeAllowed: Bool = false
     /// nil = 가림 상태. 값이 있으면 그 시각까지 공개 (distantFuture = 직접 닫을 때까지)
     public var revealedUntil: Date?
     /// 연속으로 인식에서 빠진 횟수
@@ -93,11 +94,12 @@ public final class BlindTracker {
                 b.kind = r.kind
                 b.label = r.label
                 b.holes = r.holes
+                b.badgeAllowed = r.badgeAllowed
                 b.misses = 0
                 next.append(b)
             } else {
                 next.append(TrackedBlind(id: UUID(), personID: r.personID, rect: r.rect, kind: r.kind,
-                                         label: r.label, holes: r.holes,
+                                         label: r.label, holes: r.holes, badgeAllowed: r.badgeAllowed,
                                          revealedUntil: nil, misses: 0, provisional: false))
             }
         }
@@ -118,6 +120,13 @@ public final class BlindTracker {
     }
 
     public func removeAll() { blinds.removeAll() }
+
+    /// 배지 위치를 새 화면 기준으로 갱신 (인식을 기다리지 않고 프레임마다)
+    public func updateHoles(_ f: (TrackedBlind) -> [CGRect]?) {
+        for i in blinds.indices where blinds[i].badgeAllowed {
+            if let h = f(blinds[i]) { blinds[i].holes = h }
+        }
+    }
 
     /// 클릭 공개/다시 가림
     @discardableResult

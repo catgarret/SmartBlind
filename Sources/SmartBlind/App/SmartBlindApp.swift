@@ -69,4 +69,9 @@ final class SettingsWindowController: NSObject, NSWindowDelegate {
         NSApp.activate(ignoringOtherApps: true)
         window?.makeKeyAndOrderFront(nil)
     }
+
+    /// 설정 창을 닫으면 이름을 다시 가림
+    func windowWillClose(_ notification: Notification) {
+        AppModel.shared.revealNamesInSettings = false
+    }
 }
